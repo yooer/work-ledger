@@ -1,0 +1,66 @@
+{{define "report-stats"}}{{$s := .Summary}}<div class="row row-cards mb-3">
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">台账记录</div><div class="wl-stat-value">{{$s.RecordCount}}</div><div class="small text-secondary">{{if $s.Truncated}}共 {{$s.TotalRecordCount}} 条，已截取{{else}}条{{end}}</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">累计工作次数</div><div class="wl-stat-value">{{$s.TotalWorkCount}}</div><div class="small text-secondary">次</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">参与人员</div><div class="wl-stat-value">{{$s.InvolvedEmployeeCount}}</div><div class="small text-secondary">人</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">平均难度 / 高难度</div><div class="wl-stat-value">{{$s.AvgDifficulty}}</div><div class="small text-secondary">4-5 级 {{$s.HighDifficultyRecords}} 条 · 集客 {{$s.CustomerProjectRecords}} 条</div></div></div></div>
+</div>{{end}}
+
+{{define "report-scope-select"}}{{if .Departments}}<div class="col-md-3"><label class="form-label">统计范围</label>
+    <select class="form-select" name="department_id">
+        {{if .IsAdmin}}<option value="0">全公司</option>{{else}}<option value="0">我本人</option>{{end}}
+        {{$sel := .SelectedDept}}{{range .Departments}}<option value="{{.id}}"{{if same .id $sel}} selected{{end}}>{{.label}}（含下级部门）</option>{{end}}
+    </select></div>{{end}}{{end}}
+
+{{define "report-generate"}}<div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">{{icon "robot"}} AI 一键生成</h3></div>
+    <div class="card-body">
+        {{if not .AIReady}}<div class="alert alert-warning mb-3">尚未配置 AI 服务。请管理员在配置文件中设置 AI_API_KEY、AI_BASE_URL、AI_MODEL 后再生成。</div>{{end}}
+        <p class="text-secondary">按左侧当前周期与统计范围的台账生成 Markdown 总结并保存到历史记录。<strong>请先修改完台账再生成</strong>；可以多次生成，每次都会保存一个新版本。</p>
+        <div class="mb-3"><label class="form-label">写作风格</label>
+            <div class="form-selectgroup">{{range .Styles}}<label class="form-selectgroup-item"><input type="radio" name="style" value="{{.value}}" class="form-selectgroup-input"{{if eq .value "normal"}} checked{{end}}><span class="form-selectgroup-label">{{.label}}</span></label>{{end}}</div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100"{{if not .AIReady}} disabled{{end}}>{{icon "spark"}}一键生成总结</button>
+        <div class="form-hint mt-2">生成通常需要 10 秒到 2 分钟，请耐心等待，不要关闭页面。</div>
+    </div>
+</div>{{end}}
+
+{{define "report-categories"}}<div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">工作分类分布</h3></div>
+    {{if .ByCategory}}<div class="table-responsive"><table class="table table-vcenter card-table">
+        <thead><tr><th>分类</th><th class="text-end">记录</th><th class="text-end">次数</th><th class="w-25">占比</th></tr></thead>
+        <tbody>{{$total := .TotalWorkCount}}{{range .ByCategory}}<tr>
+            <td>{{.Category}}{{if .IsCustomerProject}} <span class="badge bg-teal-lt">集客</span>{{end}}</td>
+            <td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td>
+            <td><div class="d-flex align-items-center gap-2"><progress class="wl-progress" max="100" value="{{pct .WorkCount $total}}"></progress><span class="small text-secondary">{{pct .WorkCount $total}}%</span></div></td>
+        </tr>{{end}}</tbody></table></div>{{else}}<div class="card-body text-secondary">暂无数据。</div>{{end}}
+</div>
+{{if .ByProject}}<div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">集客项目</h3></div>
+    <div class="table-responsive"><table class="table table-vcenter card-table">
+        <thead><tr><th>项目</th><th class="text-end">记录</th><th class="text-end">次数</th></tr></thead>
+        <tbody>{{range .ByProject}}<tr><td>{{.Project}}</td><td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td></tr>{{end}}</tbody></table></div>
+</div>{{end}}{{end}}
+
+{{define "report-people"}}<div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">人员投入</h3></div>
+    {{if .}}<div class="table-responsive wl-scroll-300"><table class="table table-vcenter card-table">
+        <thead><tr><th>姓名</th><th>部门</th><th class="text-end">参与记录</th><th class="text-end">工作次数</th></tr></thead>
+        <tbody>{{range .}}<tr><td>{{.Name}}</td><td class="small text-secondary">{{.Department}}</td><td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td></tr>{{end}}</tbody></table></div>
+    {{else}}<div class="card-body text-secondary">暂无数据。</div>{{end}}
+</div>{{end}}
+
+{{define "report-preview"}}<div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">台账预览</h3><span class="ms-auto small text-secondary">最多显示 12 条</span></div>
+    {{if .}}<div class="list-group list-group-flush">{{range .}}<div class="list-group-item">
+        <div class="d-flex justify-content-between small text-secondary"><span>{{dt .WorkAt}} · {{.Category.Name}}{{if .ProjectCategory}} / {{.ProjectCategory}}{{end}}</span><span>难度 {{.Difficulty}} · {{.WorkCount}} 次 · {{.Creator.Name}}</span></div>
+        <div>{{short .Content 120}}</div>
+    </div>{{end}}</div>{{else}}<div class="card-body text-secondary">该范围内没有台账记录。</div>{{end}}
+</div>{{end}}
+
+{{define "report-history"}}<div class="card">
+    <div class="card-header"><h3 class="card-title">历史总结</h3></div>
+    {{if .Items}}<div class="list-group list-group-flush">{{range .Items}}<a class="list-group-item list-group-item-action" href="{{$.Base}}/{{.id}}">
+        <div class="fw-bold">{{if .week_start}}{{.week_start}} 至 {{.week_end}}{{else if .report_year}}{{.report_year}} 年度{{else}}{{.period_label}}{{end}}</div>
+        <div class="small text-secondary">{{.scope_label}} · {{if eq (str .source) "api"}}API{{else}}{{default "系统" .creator_name}}{{end}} · {{dt (str .created_at)}}</div>
+    </a>{{end}}</div>{{else}}<div class="card-body text-secondary">还没有生成过总结。</div>{{end}}
+</div>{{end}}

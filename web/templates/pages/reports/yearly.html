@@ -1,0 +1,44 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
+{{define "content"}}<div class="card mb-3 wl-filter-card"><div class="card-body">
+    <form method="get" action="/reports/yearly" class="row g-2 align-items-end">
+        <div class="col-md-2"><label class="form-label">年度</label><select class="form-select" name="year">{{$y := .Year}}{{range .Years}}<option value="{{.}}"{{if eq . $y}} selected{{end}}>{{.}} 年</option>{{end}}</select></div>
+        {{template "report-scope-select" .}}
+        <div class="col-md-auto"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button></div>
+    </form>
+    <div class="small text-secondary mt-2">按自然年统计：<strong>{{.Data.Period.Start}} 至 {{.Data.Period.End}}</strong> · 统计范围：<strong>{{.Data.Scope.Label}}</strong> · 有记录的月份 {{.Data.Summary.ActiveMonths}} 个</div>
+</div></div>
+{{template "report-stats" .Data}}
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-header"><h3 class="card-title">月度工作分布</h3></div><div class="card-body"><div id="chart-months" class="wl-chart"></div></div></div>
+        <div class="row row-cards mb-3">
+            <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">季度统计</h3></div><div class="card-body"><div id="chart-quarters" class="wl-chart"></div></div></div></div>
+            <div class="col-md-6"><div class="card"><div class="card-header"><h3 class="card-title">难度分布</h3></div><div class="card-body"><div id="chart-difficulty" class="wl-chart"></div></div></div></div>
+        </div>
+        {{template "report-categories" .Data.Summary}}
+        {{template "report-people" .Data.Summary.ByEmployee}}
+        {{template "report-preview" .Preview}}
+    </div>
+    <div class="col-lg-4">
+        <form data-ajax data-url="/reports/yearly/ajax" data-action="generate" novalidate>
+            <input type="hidden" name="year" value="{{.Year}}">
+            <input type="hidden" name="department_id" value="{{.SelectedDept}}">
+            {{template "report-generate" .}}
+        </form>
+        {{template "report-history" (dict "Items" .History "Base" "/reports/yearly")}}
+    </div>
+</div>{{end}}
+{{define "scripts"}}<script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
+<script src="{{asset "js/reports.js"}}"></script>
+<script>
+(function () {
+    var data = {{.Chart}};
+    var m = data.months || [], q = data.quarters || [], d = data.difficulty || [];
+    WLCharts.bars('#chart-months', m.map(function (x) { return x.label; }), [
+        { name: '记录数', data: m.map(function (x) { return x.record_count; }) },
+        { name: '工作次数', data: m.map(function (x) { return x.work_count; }) }
+    ]);
+    WLCharts.bars('#chart-quarters', q.map(function (x) { return x.label; }), [{ name: '工作次数', data: q.map(function (x) { return x.work_count; }) }]);
+    WLCharts.donut('#chart-difficulty', d.map(function (x) { return x.level + '级 ' + x.label; }), d.map(function (x) { return x.record_count; }));
+})();
+</script>{{end}}

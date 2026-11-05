@@ -1,0 +1,7 @@
+/* 周报、年度、时段总结页 */
+.wl-progress { width: 100%; height: .5rem; accent-color: #0f766e; }
+.wl-scroll-300 { max-height: 320px; overflow-y: auto; }
+.wl-markdown { font-size: .95rem; line-height: 1.8; }
+.wl-markdown h2 { font-size: 1.25rem; border-bottom: 1px solid var(--tblr-border-color); padding-bottom: .35rem; }
+.wl-markdown h3 { font-size: 1.05rem; }
+.wl-markdown ul, .wl-markdown ol { padding-left: 1.4rem; }

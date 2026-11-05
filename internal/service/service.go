@@ -27,6 +27,12 @@ type Services struct {
 	Depts      *Departments
 	Categories *Categories
 	Records    *Records
+	AI         *AIClient
+	Weekly     *WeeklyReports
+	Annual     *AnnualReports
+	Period     *PeriodReports
+	Scheduler  *Scheduler
+	Dashboard  *Dashboard
 }
 
 func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
@@ -39,6 +45,12 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Depts = &Departments{Core: core}
 	s.Categories = &Categories{Core: core}
 	s.Records = &Records{Core: core, Settings: s.Settings}
+	s.AI = &AIClient{Core: core}
+	s.Weekly = &WeeklyReports{Core: core, Settings: s.Settings, AI: s.AI}
+	s.Annual = &AnnualReports{Core: core, AI: s.AI}
+	s.Period = &PeriodReports{Core: core, AI: s.AI}
+	s.Scheduler = &Scheduler{Core: core, Settings: s.Settings, Weekly: s.Weekly, Annual: s.Annual}
+	s.Dashboard = &Dashboard{Core: core, Records: s.Records, Settings: s.Settings}
 	return s
 }
 

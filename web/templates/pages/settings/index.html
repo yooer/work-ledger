@@ -1,0 +1,107 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/settings.css"}}">{{end}}
+{{define "content"}}<div class="row row-cards mb-3">
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">AI 生成服务</div><div class="h2 mb-0 {{if .AIReady}}text-success{{else}}text-danger{{end}}">{{if .AIReady}}已配置{{else}}未配置{{end}}</div><div class="small text-secondary">OpenAI 兼容协议</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">AI 接口令牌</div><div class="h2 mb-0 {{if .TokenReady}}text-success{{else}}text-danger{{end}}">{{if .TokenReady}}已启用{{else}}未启用{{end}}</div><div class="small text-secondary">Bearer Token</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">数据库</div><div class="h2 mb-0 text-success">SQLite</div><div class="small text-secondary text-truncate" title="{{.DBPath}}">{{.DBPath}}</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">数据规模</div><div class="h2 mb-0">{{.Counts.records}} <small class="fs-5">条台账</small></div><div class="small text-secondary">{{.Counts.users}} 名员工 / {{.Counts.departments}} 个部门</div></div></div></div>
+</div>
+<div class="row row-cards">
+<div class="col-lg-6">
+    <form class="card mb-3" data-ajax data-url="/settings/ajax" data-action="save_week_cycle" novalidate>
+        <div class="card-header"><h3 class="card-title">周报统计周期</h3><span class="badge bg-success-lt ms-auto">当前：{{.CycleLabel}}</span></div>
+        <div class="card-body">
+            <p class="text-secondary">设置“一周”从星期几开始、到星期几结束，例如<strong>上周五至本周四</strong>。周报中心、工作台、API 与自动生成都会按此周期自动对齐日期。</p>
+            <div class="row g-2">
+                <div class="col-6"><label class="form-label">一周开始于</label><select class="form-select" name="week_start_weekday" data-week-start>{{$s := .WeekStart}}{{range seq 1 7}}<option value="{{.}}"{{if eq . $s}} selected{{end}}>{{dayName .}}</option>{{end}}</select></div>
+                <div class="col-6"><label class="form-label">一周结束于</label><select class="form-select" name="week_end_weekday" data-week-end>{{$e := .WeekEnd}}{{range seq 1 7}}<option value="{{.}}"{{if eq . $e}} selected{{end}}>{{dayName .}}</option>{{end}}</select></div>
+            </div>
+            <div class="form-hint mt-2">必须是完整 7 天周期：结束日 = 开始日 + 6 天（选择开始日后会自动带出结束日）。修改只影响之后的默认周期，不改变历史周报。</div>
+        </div>
+        <div class="card-footer text-end"><button type="submit" class="btn btn-primary">{{icon "check"}}保存周期</button></div>
+    </form>
+
+    <form class="card mb-3" data-ajax data-url="/settings/ajax" data-action="save_auto" novalidate>
+        {{$a := .Auto}}
+        <div class="card-header"><h3 class="card-title">自动生成全公司总结</h3><span class="badge ms-auto {{if or $a.WeeklyEnabled $a.YearlyEnabled}}bg-success-lt{{else}}bg-secondary-lt{{end}}">{{if or $a.WeeklyEnabled $a.YearlyEnabled}}已开启{{else}}已关闭（默认）{{end}}</span></div>
+        <div class="card-body">
+            <div class="alert alert-info">默认关闭。平时建议<strong>先修改好台账，再到“周报中心”手动一键生成</strong>；需要时可在这里开启由服务自动生成。已存在同周期全公司总结（包括手动生成的）时不会重复生成。</div>
+            <h4>周报</h4>
+            <label class="form-check form-switch"><input class="form-check-input" type="checkbox" name="auto_weekly_enabled" value="1"{{if $a.WeeklyEnabled}} checked{{end}}><span class="form-check-label">自动生成上一周期的全公司周报</span></label>
+            <div class="row g-2 mb-1">
+                <div class="col-4"><label class="form-label">周期结束后第几天</label><input class="form-control" type="number" name="auto_weekly_delay_days" min="1" max="6" value="{{$a.WeeklyDelay}}"></div>
+                <div class="col-4"><label class="form-label">时间</label><input class="form-control" type="time" name="auto_weekly_time" value="{{$a.WeeklyTime}}"></div>
+                <div class="col-4"><label class="form-label">风格</label><select class="form-select" name="auto_weekly_style">{{range .Styles}}<option value="{{.value}}"{{if eq .value $a.WeeklyStyle}} selected{{end}}>{{.label}}</option>{{end}}</select></div>
+            </div>
+            <div class="form-hint mb-3">按当前设置，下次计划：{{$a.NextWeekly}}</div>
+            <h4>年度总结</h4>
+            <label class="form-check form-switch"><input class="form-check-input" type="checkbox" name="auto_yearly_enabled" value="1"{{if $a.YearlyEnabled}} checked{{end}}><span class="form-check-label">每年 1 月自动生成上一年度全公司总结</span></label>
+            <div class="row g-2 mb-1">
+                <div class="col-4"><label class="form-label">1 月几日</label><input class="form-control" type="number" name="auto_yearly_day" min="1" max="31" value="{{$a.YearlyDay}}"></div>
+                <div class="col-4"><label class="form-label">时间</label><input class="form-control" type="time" name="auto_yearly_time" value="{{$a.YearlyTime}}"></div>
+                <div class="col-4"><label class="form-label">风格</label><select class="form-select" name="auto_yearly_style">{{range .Styles}}<option value="{{.value}}"{{if eq .value $a.YearlyStyle}} selected{{end}}>{{.label}}</option>{{end}}</select></div>
+            </div>
+            <div class="form-hint">按当前设置，下次计划：{{$a.NextYearly}}</div>
+            {{with .Last}}<div class="alert {{if .OK}}alert-success{{else}}alert-danger{{end}} mt-3 mb-0 small">最近一次执行（{{.Time}}）：{{.Message}}</div>{{end}}
+        </div>
+        <div class="card-footer text-end"><button type="submit" class="btn btn-primary">{{icon "check"}}保存设置</button></div>
+    </form>
+</div>
+<div class="col-lg-6">
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">AI 配置状态</h3><span class="badge ms-auto {{if .AIReady}}bg-success-lt{{else}}bg-danger-lt{{end}}">{{if .AIReady}}可生成{{else}}不可生成{{end}}</span></div>
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-4">AI 接口地址</dt><dd class="col-8"><code>{{.AIBaseURL}}</code></dd>
+                <dt class="col-4">模型</dt><dd class="col-8"><code>{{.AIModel}}</code></dd>
+                <dt class="col-4">API Key</dt><dd class="col-8">{{if .KeyReady}}<span class="text-success">已配置</span>{{else}}<span class="text-danger">未配置</span>{{end}}</dd>
+                <dt class="col-4">接口令牌</dt><dd class="col-8">{{if .TokenReady}}<span class="text-success">已配置</span>{{else}}<span class="text-danger">未配置</span>{{end}}</dd>
+            </dl>
+            <p class="mb-1">在配置文件 <code>{{.EnvFile}}</code> 中设置以下项，修改后执行 <code>wlctl restart</code> 生效：</p>
+            <pre class="wl-pre">AI_API_TOKEN=一串足够长的随机令牌
+AI_API_KEY=你的大模型密钥
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_MODEL=deepseek-chat
+AI_TIMEOUT=120</pre>
+            <p class="mb-1">生成随机令牌：</p><pre class="wl-pre">openssl rand -hex 32</pre>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">运行环境</h3></div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-4">程序版本</dt><dd class="col-8">v{{.App.Version}}</dd>
+                <dt class="col-4">运行目录</dt><dd class="col-8"><code>{{.Home}}</code></dd>
+                <dt class="col-4">监听地址</dt><dd class="col-8"><code>{{.ListenAddr}}</code></dd>
+                <dt class="col-4">应用地址</dt><dd class="col-8"><code>{{.AppURL}}</code></dd>
+                <dt class="col-4">时区</dt><dd class="col-8">{{.Timezone}}</dd>
+                <dt class="col-4">数据统计</dt><dd class="col-8">{{.Counts.records}} 条台账 / {{.Counts.reports}} 份周报 / {{.Counts.annual_reports}} 份年度总结 / {{.Counts.period_reports}} 份时段总结</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">AI 数据接口</h3><span class="ms-auto small text-secondary">Base URL：<code>{{.AppURL}}/api/v1</code></span></div>
+        <div class="card-body">
+            <p class="text-secondary">外部 AI 可通过 <code>GET /api/v1/weekly|yearly|period</code> 拉取结构化数据自行总结，或调用对应的 <code>*-summary</code> 接口由本系统生成并保存。均需 <code>Authorization: Bearer 令牌</code>；<code>dry_run=true</code> 只返回提示词。</p>
+            <table class="table table-sm">
+                <tbody>
+                <tr><td><span class="badge bg-green-lt">GET</span></td><td><code>/api/v1/weekly</code></td><td>week_start、week_end、department_id、employee_id、include_sub_departments</td></tr>
+                <tr><td><span class="badge bg-blue-lt">POST</span></td><td><code>/api/v1/weekly-summary</code></td><td>同上 + style、dry_run、save</td></tr>
+                <tr><td><span class="badge bg-green-lt">GET</span></td><td><code>/api/v1/yearly</code></td><td>year、department_id、employee_id</td></tr>
+                <tr><td><span class="badge bg-blue-lt">POST</span></td><td><code>/api/v1/yearly-summary</code></td><td>同上 + style、dry_run、save</td></tr>
+                <tr><td><span class="badge bg-green-lt">GET</span></td><td><code>/api/v1/period</code></td><td>start_date、end_date、department_id、employee_id</td></tr>
+                <tr><td><span class="badge bg-blue-lt">POST</span></td><td><code>/api/v1/period-summary</code></td><td>同上 + style、dry_run、save</td></tr>
+                </tbody>
+            </table>
+            <pre class="wl-pre">curl -s -H "Authorization: Bearer YOUR_AI_API_TOKEN" \
+  "{{.AppURL}}/api/v1/weekly?week_start=2026-03-02"</pre>
+        </div>
+    </div>
+</div>
+</div>{{end}}
+{{define "scripts"}}<script>
+(function () {
+    var start = document.querySelector('[data-week-start]');
+    var end = document.querySelector('[data-week-end]');
+    start.addEventListener('change', function () { end.value = String(((parseInt(start.value, 10) + 5) % 7) + 1); });
+})();
+</script>{{end}}

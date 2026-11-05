@@ -7,5 +7,9 @@ func (c *Controllers) registerDashboard(app *web.App) {
 }
 
 func (c *Controllers) dashboard(ctx *web.Ctx) error {
-	return ctx.Render("dashboard", map[string]any{"PageTitle": "工作台", "Active": "dashboard"})
+	d, err := c.S.Dashboard.Build(ctx.User)
+	if err != nil {
+		return err
+	}
+	return ctx.Render("dashboard", map[string]any{"PageTitle": "工作台", "Active": "dashboard", "D": d})
 }

@@ -20,6 +20,9 @@ func Register(app *web.App, s *service.Services) {
 	c.registerDashboard(app)
 	c.registerOrg(app)
 	c.registerRecords(app)
+	c.registerReports(app)
+	c.registerAPI(app.Mux)
+	c.registerSettings(app)
 }
 
 // sess 把会话适配为 service.KV。

@@ -1,1 +1,50 @@
-{{define "content"}}<div class="card"><div class="card-body">工作台建设中…</div></div>{{end}}
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/dash.css"}}">{{end}}
+{{define "content"}}{{$d := .D}}
+<div class="card mb-3 wl-dash-hero">
+    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+        <span class="avatar avatar-lg bg-primary text-white">{{first (str .User.name)}}</span>
+        <div class="flex-fill">
+            <h2 class="mb-1">你好，{{.User.name}}</h2>
+            <div class="text-secondary">{{.TodayLabel}} · 统计口径：{{$d.ScopeLabel}} · 本周期 {{$d.WeekStart}} 至 {{$d.WeekEnd}}</div>
+        </div>
+        <div class="btn-list">
+            <a class="btn btn-primary" href="/records/create">{{icon "plus"}}填写台账</a>
+            <a class="btn btn-outline-primary" href="/reports/weekly">{{icon "spark"}}生成周报</a>
+        </div>
+    </div>
+</div>
+<div class="row row-cards mb-3">
+    {{template "dash-stat" (dict "Title" "今日" "S" $d.Today)}}
+    {{template "dash-stat" (dict "Title" "本周期" "S" $d.Week)}}
+    {{template "dash-stat" (dict "Title" "本月" "S" $d.Month)}}
+</div>
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header"><h3 class="card-title">最近的工作记录</h3><a class="ms-auto" href="{{if .IsAdmin}}/records{{else}}/my-records{{end}}">查看全部 ›</a></div>
+            {{if $d.Recent}}<div class="list-group list-group-flush">{{range $d.Recent}}<a class="list-group-item list-group-item-action" href="/records/{{.id}}">
+                <div class="d-flex justify-content-between small text-secondary"><span>{{dt (str .work_at)}} · {{.category_name}}{{if .project_name}} / {{.project_name}}{{end}}</span><span>{{.creator_name}}</span></div>
+                <div>{{short (str .content) 100}}</div>
+            </a>{{end}}</div>{{else}}<div class="card-body">{{template "empty" "还没有工作记录，点击右上角“填写台账”开始记录。"}}</div>{{end}}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><h3 class="card-title">本月分类分布</h3></div>
+            {{if $d.Categories}}<div class="card-body"><div id="chart-cats" class="wl-chart"></div></div>{{else}}<div class="card-body text-secondary">本月暂无记录。</div>{{end}}
+        </div>
+    </div>
+</div>{{end}}
+{{define "dash-stat"}}<div class="col-md-4"><div class="card"><div class="card-body">
+    <div class="subheader">{{.Title}}</div>
+    <div class="d-flex align-items-baseline"><div class="wl-stat-value me-2">{{.S.RecordCount}}</div><div class="text-secondary">条记录</div></div>
+    <div class="small text-secondary mt-1">工作 {{.S.TotalWorkCount}} 次 · 参与 {{.S.ParticipantCount}} 人 · 平均难度 {{.S.AvgDifficulty}}</div>
+</div></div></div>{{end}}
+{{define "scripts"}}<script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
+<script src="{{asset "js/reports.js"}}"></script>
+<script>
+(function () {
+    var cats = {{.D.Categories}} || [];
+    WLCharts.donut('#chart-cats', cats.map(function (c) { return c.name; }), cats.map(function (c) { return c.total_count; }));
+})();
+</script>{{end}}

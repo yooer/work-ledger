@@ -147,4 +147,6 @@ func Run(ctx context.Context, cfg *config.Config) error {
 }
 
 // startBackground 启动后台任务（自动生成报告的调度器）。
-var startBackground = func(ctx context.Context, s *service.Services, log *slog.Logger) {}
+func startBackground(ctx context.Context, s *service.Services, log *slog.Logger) {
+	go s.Scheduler.Run(ctx)
+}

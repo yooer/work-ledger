@@ -1,0 +1,41 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
+{{define "content"}}<div class="card mb-3 wl-filter-card"><div class="card-body">
+    <form method="get" action="/reports/weekly" class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label">周期内任意日期</label><input class="form-control" type="text" name="week_start" value="{{.WeekStart}}" data-datepicker></div>
+        {{template "report-scope-select" .}}
+        <div class="col-md-auto d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button>
+            <a class="btn btn-outline-secondary" href="{{.PrevURL}}">‹ 上一周期</a><a class="btn btn-outline-secondary" href="{{.NextURL}}">下一周期 ›</a></div>
+    </form>
+    <div class="small text-secondary mt-2">当前周期：<strong>{{.WeekStart}} 至 {{.WeekEnd}}</strong> · 统计范围：<strong>{{.Data.Scope.Label}}</strong> · 周期设置：{{.CycleLabel}}{{if .IsAdmin}}（可在“系统与 AI”中修改）{{end}}</div>
+</div></div>
+{{template "report-stats" .Data}}
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-header"><h3 class="card-title">每日工作分布</h3></div><div class="card-body"><div id="chart-days" class="wl-chart"></div></div></div>
+        {{template "report-categories" .Data.Summary}}
+        {{template "report-people" .Data.Summary.ByEmployee}}
+        {{template "report-preview" .Preview}}
+    </div>
+    <div class="col-lg-4">
+        <form data-ajax data-url="/reports/weekly/ajax" data-action="generate" novalidate>
+            <input type="hidden" name="week_start" value="{{.WeekStart}}">
+            <input type="hidden" name="department_id" value="{{.SelectedDept}}">
+            {{template "report-generate" .}}
+        </form>
+        {{template "report-history" (dict "Items" .History "Base" "/reports/weekly")}}
+    </div>
+</div>{{end}}
+{{define "scripts"}}<script src="{{asset "libs/litepicker/litepicker.js"}}"></script>
+<script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
+<script src="{{asset "js/reports.js"}}"></script>
+<script>
+WL.initDatepicker(document);
+(function () {
+    var data = {{.Chart}};
+    var days = data.days || [];
+    WLCharts.bars('#chart-days', days.map(function (d) { return d.date.slice(5); }), [
+        { name: '记录数', data: days.map(function (d) { return d.record_count; }) },
+        { name: '工作次数', data: days.map(function (d) { return d.work_count; }) }
+    ]);
+})();
+</script>{{end}}

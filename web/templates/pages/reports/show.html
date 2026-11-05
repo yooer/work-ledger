@@ -1,0 +1,39 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
+{{define "content"}}{{$r := .Report}}<div class="row row-cards">
+<div class="col-lg-9">
+    <div class="card">
+        <div class="card-header">
+            <div><h3 class="card-title">{{.Title}}</h3><div class="card-subtitle">{{$r.scope_label}}</div></div>
+            <div class="card-actions btn-list wl-no-print">
+                <button type="button" class="btn btn-outline-secondary" data-copy-md>{{icon "check"}}复制 Markdown</button>
+                <button type="button" class="btn btn-outline-secondary" data-print>{{icon "print"}}打印</button>
+            </div>
+        </div>
+        <div class="card-body wl-markdown">{{md (str $r.content)}}</div>
+    </div>
+    <textarea class="d-none" id="report-md">{{$r.content}}</textarea>
+</div>
+<div class="col-lg-3 wl-no-print">
+    <div class="card">
+        <div class="card-body">
+            <dl class="mb-0">
+                <dt>统计范围</dt><dd>{{$r.scope_label}}</dd>
+                <dt>来源</dt><dd>{{if eq (str $r.source) "api"}}API 接口{{else}}系统内生成{{end}}</dd>
+                <dt>模型</dt><dd>{{default "—" $r.model}}</dd>
+                <dt>生成人</dt><dd>{{default "系统" $r.creator_name}}</dd>
+                <dt>生成时间</dt><dd>{{dt (str $r.created_at)}}</dd>
+            </dl>
+        </div>
+        <div class="card-footer"><a class="btn btn-link px-0" href="{{.BackURL}}">‹ 返回</a></div>
+    </div>
+    <div class="alert alert-info mt-3 small">AI 生成内容仅依据台账数据，请核对后再对外发布。台账修改后可以重新生成新版本。</div>
+</div>
+</div>{{end}}
+{{define "scripts"}}<script>
+document.querySelectorAll('[data-print]').forEach(function (b) { b.addEventListener('click', function () { window.print(); }); });
+document.querySelectorAll('[data-copy-md]').forEach(function (b) {
+    b.addEventListener('click', function () {
+        navigator.clipboard.writeText(document.getElementById('report-md').value).then(function () { WL.toast('success', '已复制 Markdown'); });
+    });
+});
+</script>{{end}}
