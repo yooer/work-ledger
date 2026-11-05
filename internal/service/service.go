@@ -19,10 +19,13 @@ type Core struct {
 
 // Services 汇总所有业务服务。
 type Services struct {
-	Core     *Core
-	Settings *Settings
-	Auth     *Auth
-	Security *Security
+	Core       *Core
+	Settings   *Settings
+	Auth       *Auth
+	Security   *Security
+	Users      *Users
+	Depts      *Departments
+	Categories *Categories
 }
 
 func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
@@ -31,6 +34,9 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Settings = &Settings{Core: core}
 	s.Auth = &Auth{Core: core}
 	s.Security = &Security{Core: core}
+	s.Users = &Users{Core: core}
+	s.Depts = &Departments{Core: core}
+	s.Categories = &Categories{Core: core}
 	return s
 }
 

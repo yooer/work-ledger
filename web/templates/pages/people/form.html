@@ -1,0 +1,62 @@
+{{define "content"}}<div class="row row-cards">
+<div class="col-lg-8">
+<form class="card" data-ajax data-url="/people/ajax" data-action="{{if .IsEdit}}update{{else}}create{{end}}" novalidate autocomplete="off">
+    <input type="hidden" name="id" value="{{.Old.id}}">
+    <div class="card-header"><h3 class="card-title">{{.PageTitle}}</h3></div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label required">登录账号</label><input class="form-control" type="text" name="username" value="{{.Old.username}}" maxlength="64" required><div class="form-hint">3-64 位字母、数字或 _ . @ -</div></div>
+            <div class="col-md-6 mb-3"><label class="form-label required">姓名</label><input class="form-control" type="text" name="name" value="{{.Old.name}}" maxlength="50" required></div>
+            <div class="col-md-6 mb-3"><label class="form-label">员工工号</label><input class="form-control" type="text" name="employee_no" value="{{str .Old.employee_no}}" maxlength="30"><div class="form-hint">可用于登录，需唯一。</div></div>
+            <div class="col-md-6 mb-3"><label class="form-label required">角色</label>
+                <select class="form-select" name="role"{{if .IsSelf}} disabled{{end}}>
+                    <option value="employee"{{if eq (str .Old.role) "employee"}} selected{{end}}>员工</option>
+                    <option value="manager"{{if eq (str .Old.role) "manager"}} selected{{end}}>部门经理</option>
+                    <option value="admin"{{if eq (str .Old.role) "admin"}} selected{{end}}>系统管理员</option>
+                </select>
+                {{if .IsSelf}}<input type="hidden" name="role" value="{{.Old.role}}"><div class="form-hint">不能修改自己的角色。</div>{{else}}<div class="form-hint">部门经理可查看、导出本部门（含子部门）台账并生成部门总结。</div>{{end}}
+            </div>
+            <div class="col-md-6 mb-3"><label class="form-label">所属部门</label>
+                <select class="form-select" name="department_id" data-tom><option value="0">未分配部门</option>
+                {{$sel := .Old.department_id}}{{range .Departments}}<option value="{{.id}}"{{if same .id $sel}} selected{{end}}>{{.label}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+                </select></div>
+            <div class="col-md-6 mb-3"><label class="form-label">联系电话</label><input class="form-control" type="text" name="phone" value="{{str .Old.phone}}" maxlength="30"></div>
+            <div class="col-md-6 mb-3"><label class="form-label">电子邮箱</label><input class="form-control" type="email" name="email" value="{{str .Old.email}}" maxlength="120"></div>
+            <div class="col-md-6 mb-3"><label class="form-label">状态</label>
+                <label class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="is_active" value="1"{{if same .Old.is_active 1}} checked{{end}}{{if .IsSelf}} disabled{{end}}><span class="form-check-label">启用（停用后不能登录，历史台账保留）</span></label>
+                {{if .IsSelf}}<input type="hidden" name="is_active" value="1">{{end}}
+            </div>
+            {{if not .IsEdit}}<div class="col-md-6 mb-3"><label class="form-label required">初始密码</label>
+                <div class="input-group input-group-flat"><input class="form-control" id="p-password" type="password" name="password" autocomplete="new-password" required><span class="input-group-text"><a href="#" class="link-secondary" data-password-toggle="p-password">显示</a></span></div>
+                <div class="form-hint">至少 8 位，请通知员工首次登录后修改。</div></div>{{end}}
+        </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between">
+        <a class="btn btn-link" href="/people">返回列表</a>
+        <button type="submit" class="btn btn-primary">{{icon "check"}}保存</button>
+    </div>
+</form>
+</div>
+{{if .IsEdit}}<div class="col-lg-4">
+    <form class="card mb-3" data-ajax data-url="/people/ajax" data-action="reset_password" data-confirm="确定重置该员工的密码？其已登录的会话将失效。" novalidate autocomplete="off">
+        <input type="hidden" name="id" value="{{.Old.id}}">
+        <div class="card-header"><h3 class="card-title">{{icon "key"}} 重置密码</h3></div>
+        <div class="card-body">
+            <div class="mb-2"><label class="form-label">新密码</label><input class="form-control" type="password" name="new_password" autocomplete="new-password" required></div>
+            <div class="mb-0"><label class="form-label">确认新密码</label><input class="form-control" type="password" name="new_password_confirmation" autocomplete="new-password" required></div>
+        </div>
+        <div class="card-footer text-end"><button class="btn btn-outline-primary" type="submit">重置密码</button></div>
+    </form>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">{{icon "shield"}} TOTP 二次验证</h3></div>
+        <div class="card-body">
+            <p>当前状态：{{if same .Old.totp_enabled 1}}<span class="badge bg-success-lt">已启用</span>{{else}}<span class="badge bg-secondary-lt">未启用</span>{{end}}</p>
+            <p class="text-secondary small">员工丢失验证器且恢复码不可用时，可重置二次验证。重置后员工下次只用密码登录，随后应重新绑定。</p>
+            <button type="button" class="btn btn-outline-danger w-100" data-ajax-click data-url="/people/ajax" data-action="reset_totp" data-payload='{"id":{{.Old.id}}}' data-confirm="确定重置该员工的二次验证？旧密钥和全部恢复码将失效。"{{if not (same .Old.totp_enabled 1)}} disabled{{end}}>重置二次验证</button>
+        </div>
+    </div>
+    <div class="card mt-3"><div class="card-body small text-secondary">
+        创建时间：{{dt (str .Old.created_at)}}<br>更新时间：{{dt (str .Old.updated_at)}}<br>最后登录：{{dt (str .Old.last_login_at)}}
+    </div></div>
+</div>{{end}}
+</div>{{end}}

@@ -8,11 +8,11 @@ import (
 func (c *Controllers) registerSecurity(app *web.App) {
 	app.Page("/security", web.Login, c.securityPage)
 	app.Ajax("/security/ajax", web.Login, web.Actions{
-		"start_totp":           {Validate: validator.None, Handle: c.startTotp},
-		"cancel_totp":          {Validate: validator.None, Handle: c.cancelTotp},
-		"enable_totp":          {Validate: validator.Code, Handle: c.enableTotp},
-		"disable_totp":         {Validate: validator.PasswordCode, Handle: c.disableTotp},
-		"regenerate_recovery":  {Validate: validator.PasswordCode, Handle: c.regenerateRecovery},
+		"start_totp":          {Validate: validator.None, Handle: c.startTotp},
+		"cancel_totp":         {Validate: validator.None, Handle: c.cancelTotp},
+		"enable_totp":         {Validate: validator.Code, Handle: c.enableTotp},
+		"disable_totp":        {Validate: validator.PasswordCode, Handle: c.disableTotp},
+		"regenerate_recovery": {Validate: validator.PasswordCode, Handle: c.regenerateRecovery},
 	})
 }
 

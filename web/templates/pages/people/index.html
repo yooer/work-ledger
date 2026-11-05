@@ -1,0 +1,44 @@
+{{define "content"}}<div class="card mb-3 wl-filter-card">
+    <div class="card-body">
+        <form method="get" action="/people" class="row g-2 align-items-end">
+            <div class="col-md-4"><label class="form-label">关键词</label><input class="form-control" type="search" name="q" value="{{.Filter.Q}}" placeholder="姓名、账号、工号、电话"></div>
+            <div class="col-md-3"><label class="form-label">部门</label>
+                <select class="form-select" name="department_id" data-tom><option value="0">全部部门</option>
+                {{$sel := .Filter.DepartmentID}}{{range .Departments}}<option value="{{.id}}"{{if same .id $sel}} selected{{end}}>{{.label}}</option>{{end}}
+                </select></div>
+            <div class="col-md-2"><label class="form-label">状态</label>
+                <select class="form-select" name="status">
+                    <option value="">全部</option>
+                    <option value="1"{{if eq .Filter.Status "1"}} selected{{end}}>启用</option>
+                    <option value="0"{{if eq .Filter.Status "0"}} selected{{end}}>停用</option>
+                </select></div>
+            <div class="col-md-3 d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}筛选</button><a class="btn btn-link" href="/people">重置</a></div>
+        </form>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">人员列表 <span class="text-secondary">（共 {{.Total}} 人）</span></h3>
+        <div class="card-actions"><a class="btn btn-primary" href="/people/create">{{icon "plus"}}新增员工</a></div>
+    </div>
+    {{if .People}}<div class="table-responsive">
+        <table class="table table-vcenter card-table">
+            <thead><tr><th>姓名</th><th>账号 / 工号</th><th>角色</th><th>部门</th><th>联系方式</th><th>2FA</th><th>最后登录</th><th>状态</th><th class="w-1"></th></tr></thead>
+            <tbody>
+            {{range .People}}<tr>
+                <td><div class="d-flex align-items-center"><span class="avatar avatar-sm me-2 bg-primary-lt">{{first (str .name)}}</span><strong>{{.name}}</strong></div></td>
+                <td><div>{{.username}}</div><div class="small text-secondary">{{default "—" .employee_no}}</div></td>
+                <td>{{role .role}}</td>
+                <td>{{dept .}}</td>
+                <td><div class="small">{{default "—" .phone}}</div><div class="small text-secondary">{{default "" .email}}</div></td>
+                <td>{{if eq .totp_enabled 1}}<span class="badge bg-success-lt">已启用</span>{{else}}<span class="badge bg-secondary-lt">未启用</span>{{end}}</td>
+                <td class="small">{{dt (str .last_login_at)}}</td>
+                <td>{{if eq .is_active 1}}<span class="badge bg-success-lt">启用</span>{{else}}<span class="badge bg-secondary-lt">停用</span>{{end}}</td>
+                <td><a class="btn btn-sm btn-outline-primary" href="/people/{{.id}}/edit">{{icon "edit"}}编辑</a></td>
+            </tr>{{end}}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer d-flex align-items-center">{{template "pager" .Pager}}</div>
+    {{else}}<div class="card-body">{{template "empty" "没有符合条件的人员。"}}</div>{{end}}
+</div>{{end}}

@@ -1,0 +1,76 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/categories.css"}}">{{end}}
+{{define "content"}}<div class="alert alert-info">
+    <strong>数据完整性保护：</strong>分类停用后不会出现在新建台账的选项中，但历史记录仍保留原分类。集客项目子分类如需停止使用，请取消“启用”，不要删除。
+</div>
+<div class="card mb-4">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title">01 · 工作分类</h3>
+            <div class="card-subtitle">工作内容的大分类。勾选“集客业务”属性后，该分类下的台账需要选择集客项目子分类。</div>
+        </div>
+    </div>
+    <div class="card-body border-bottom">
+        <form class="row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_work" novalidate>
+            <div class="col-md-5"><label class="form-label">新增分类名称</label><input class="form-control" type="text" name="name" placeholder="例如：客户回访" maxlength="60" required></div>
+            <div class="col-md-2"><label class="form-label">排序</label><input class="form-control" type="number" name="sort_order" value="0" min="-999" max="999"></div>
+            <div class="col-md-3 d-flex gap-3 pb-2">
+                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_customer_project" value="1"><span class="form-check-label">集客业务</span></label>
+                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label>
+            </div>
+            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">{{icon "plus"}}新增分类</button></div>
+        </form>
+    </div>
+    {{if .Categories}}<div class="table-responsive">
+        <table class="table table-vcenter card-table wl-edit-table">
+            <thead><tr><th>分类名称</th><th>集客属性</th><th>子分类数</th><th>台账记录</th><th>排序</th><th>状态</th><th class="w-1">保存</th></tr></thead>
+            <tbody>
+            {{range .Categories}}{{$locked := and (eq .is_customer_project 1) (gt .project_count 0)}}<tr>
+                <td><form id="wc-{{.id}}" data-ajax data-url="/categories/ajax" data-action="save_work" novalidate><input type="hidden" name="id" value="{{.id}}"></form>
+                    <input form="wc-{{.id}}" class="form-control form-control-sm" type="text" name="name" value="{{.name}}" maxlength="60" required aria-label="分类名称"></td>
+                <td><label class="form-check mb-0"><input form="wc-{{.id}}" class="form-check-input" type="checkbox" name="is_customer_project" value="1"{{if eq .is_customer_project 1}} checked{{end}}{{if $locked}} disabled{{end}}><span class="form-check-label">集客业务</span></label>
+                    {{if $locked}}<input form="wc-{{.id}}" type="hidden" name="is_customer_project" value="1"><div class="small text-secondary">已有子分类，不能取消</div>{{end}}</td>
+                <td><span class="badge bg-secondary-lt">{{.project_count}}</span></td>
+                <td><span class="badge bg-secondary-lt">{{.record_count}}</span></td>
+                <td><input form="wc-{{.id}}" class="form-control form-control-sm wl-input-mini" type="number" name="sort_order" value="{{.sort_order}}" min="-999" max="999" aria-label="排序"></td>
+                <td><label class="form-check form-switch mb-0"><input form="wc-{{.id}}" class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq .is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label></td>
+                <td><button form="wc-{{.id}}" type="submit" class="btn btn-sm btn-outline-primary">保存</button></td>
+            </tr>{{end}}
+            </tbody>
+        </table>
+    </div>{{else}}<div class="card-body text-secondary">暂无工作分类。</div>{{end}}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div>
+            <h3 class="card-title">02 · 集客项目子分类</h3>
+            <div class="card-subtitle">仅“集客业务”类工作需要选择。子分类支持新增、改名和停用，不提供删除；创建后不能更换所属一级分类。</div>
+        </div>
+    </div>
+    {{if not .CustomerCategories}}<div class="card-body"><div class="alert alert-warning mb-0">还没有“集客业务”类型的工作分类，请先在工作分类中勾选集客属性。</div></div>
+    {{else}}<div class="card-body border-bottom">
+        <form class="row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_project" novalidate>
+            <div class="col-md-3"><label class="form-label">所属工作分类</label>
+                <select class="form-select" name="work_category_id" required>{{range .CustomerCategories}}<option value="{{.id}}">{{.name}}</option>{{end}}</select></div>
+            <div class="col-md-4"><label class="form-label">新增子分类名称</label><input class="form-control" type="text" name="name" placeholder="例如：集团短信" maxlength="60" required></div>
+            <div class="col-md-2"><label class="form-label">排序</label><input class="form-control" type="number" name="sort_order" value="0" min="-999" max="999"></div>
+            <div class="col-md-1 pb-2"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label></div>
+            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">{{icon "plus"}}新增子分类</button></div>
+        </form>
+    </div>{{end}}
+    {{if .Projects}}<div class="table-responsive">
+        <table class="table table-vcenter card-table wl-edit-table">
+            <thead><tr><th>所属工作分类</th><th>子分类名称</th><th>台账记录</th><th>排序</th><th>状态</th><th class="w-1">保存</th></tr></thead>
+            <tbody>
+            {{range .Projects}}<tr>
+                <td><form id="pc-{{.id}}" data-ajax data-url="/categories/ajax" data-action="save_project" novalidate><input type="hidden" name="id" value="{{.id}}"><input type="hidden" name="work_category_id" value="{{.work_category_id}}"></form>{{.category_name}}</td>
+                <td><input form="pc-{{.id}}" class="form-control form-control-sm" type="text" name="name" value="{{.name}}" maxlength="60" required aria-label="子分类名称"></td>
+                <td><span class="badge bg-secondary-lt">{{.record_count}}</span></td>
+                <td><input form="pc-{{.id}}" class="form-control form-control-sm wl-input-mini" type="number" name="sort_order" value="{{.sort_order}}" min="-999" max="999" aria-label="排序"></td>
+                <td><label class="form-check form-switch mb-0"><input form="pc-{{.id}}" class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq .is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label></td>
+                <td><button form="pc-{{.id}}" type="submit" class="btn btn-sm btn-outline-primary">保存</button></td>
+            </tr>{{end}}
+            </tbody>
+        </table>
+    </div>{{end}}
+</div>{{end}}

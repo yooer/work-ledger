@@ -11,17 +11,17 @@ import (
 
 // 系统设置键名（app_settings 表，键值形式，与 PHP 版兼容）。
 const (
-	SettingWeekStart        = "week_start_weekday"
-	SettingWeekEnd          = "week_end_weekday"
-	SettingAutoWeekly       = "auto_weekly_enabled"
-	SettingAutoWeeklyDelay  = "auto_weekly_delay_days" // 周期结束后第几天生成（1=次日）
-	SettingAutoWeeklyTime   = "auto_weekly_time"       // HH:MM
-	SettingAutoWeeklyStyle  = "auto_weekly_style"
-	SettingAutoYearly       = "auto_yearly_enabled"
-	SettingAutoYearlyDay    = "auto_yearly_day" // 1 月几号
-	SettingAutoYearlyTime   = "auto_yearly_time"
-	SettingAutoYearlyStyle  = "auto_yearly_style"
-	SettingSchedulerLast    = "scheduler_last_result"
+	SettingWeekStart       = "week_start_weekday"
+	SettingWeekEnd         = "week_end_weekday"
+	SettingAutoWeekly      = "auto_weekly_enabled"
+	SettingAutoWeeklyDelay = "auto_weekly_delay_days" // 周期结束后第几天生成（1=次日）
+	SettingAutoWeeklyTime  = "auto_weekly_time"       // HH:MM
+	SettingAutoWeeklyStyle = "auto_weekly_style"
+	SettingAutoYearly      = "auto_yearly_enabled"
+	SettingAutoYearlyDay   = "auto_yearly_day" // 1 月几号
+	SettingAutoYearlyTime  = "auto_yearly_time"
+	SettingAutoYearlyStyle = "auto_yearly_style"
+	SettingSchedulerLast   = "scheduler_last_result"
 )
 
 // DefaultSettings 安装时写入的默认值（已存在则不覆盖）。自动生成默认关闭。

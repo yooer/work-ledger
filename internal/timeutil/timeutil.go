@@ -34,10 +34,10 @@ var nowFunc = time.Now
 
 func SetNowFunc(f func() time.Time) { nowFunc = f }
 
-func Now() time.Time       { return nowFunc().In(loc) }
-func NowString() string    { return Now().Format(DateTime) }
-func Today() string        { return Now().Format(Date) }
-func Year() int            { return Now().Year() }
+func Now() time.Time    { return nowFunc().In(loc) }
+func NowString() string { return Now().Format(DateTime) }
+func Today() string     { return Now().Format(Date) }
+func Year() int         { return Now().Year() }
 func Weekday(t time.Time) int {
 	// ISO：周一=1 … 周日=7
 	w := int(t.Weekday())

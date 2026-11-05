@@ -66,7 +66,8 @@
     /* ---------------- 表单序列化 ---------------- */
     function serialize(form) {
         const data = {};
-        $$('input, select, textarea', form).forEach((el) => {
+        Array.from(form.elements).forEach((el) => {
+            if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
             if (!el.name || el.disabled || el.type === 'file' || el.name === '_csrf') return;
             const isArray = el.name.endsWith('[]');
             const key = isArray ? el.name.slice(0, -2) : el.name;
@@ -98,14 +99,14 @@
     }
 
     function clearErrors(form) {
-        $$('.is-invalid', form).forEach((el) => el.classList.remove('is-invalid'));
-        $$('.wl-field-error', form).forEach((el) => el.remove());
+        Array.from(form.elements).forEach((el) => el.classList && el.classList.remove('is-invalid'));
+        $$('.wl-field-error').forEach((el) => el.remove());
     }
 
     function showErrors(form, errors) {
         let first = null;
         Object.keys(errors || {}).forEach((key) => {
-            const el = form.querySelector('[name="' + key + '"], [name="' + key + '[]"]');
+            const el = Array.from(form.elements).find((x) => x.name === key || x.name === key + '[]');
             const target = el ? (el.closest('[data-field]') || el) : null;
             if (!target) return;
             if (el) el.classList.add('is-invalid');
