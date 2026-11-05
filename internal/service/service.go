@@ -33,6 +33,8 @@ type Services struct {
 	Period     *PeriodReports
 	Scheduler  *Scheduler
 	Dashboard  *Dashboard
+	Import     *Importer
+	Export     *Exporter
 }
 
 func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
@@ -51,6 +53,8 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Period = &PeriodReports{Core: core, AI: s.AI}
 	s.Scheduler = &Scheduler{Core: core, Settings: s.Settings, Weekly: s.Weekly, Annual: s.Annual}
 	s.Dashboard = &Dashboard{Core: core, Records: s.Records, Settings: s.Settings}
+	s.Import = &Importer{Core: core}
+	s.Export = &Exporter{Core: core, Records: s.Records}
 	return s
 }
 

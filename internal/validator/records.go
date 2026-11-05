@@ -85,3 +85,22 @@ func RecordFilter(in Input) RecordFilterInput {
 		Page:         int(max(1, v.ID("page"))),
 	}
 }
+
+// ImportOptionsInput 导入选项（文件本身在 controller 中按上传规则检查）。
+type ImportOptionsInput struct {
+	DefaultCreatorID     int64
+	AutoCreateCategories bool
+	AutoCreateUsers      bool
+	ParticipantAsCreator bool
+}
+
+func ImportOptions(in Input) (any, error) {
+	v := New(in)
+	out := ImportOptionsInput{
+		DefaultCreatorID:     v.RequiredID("default_creator_id", "默认记录人"),
+		AutoCreateCategories: v.Bool("auto_create_categories"),
+		AutoCreateUsers:      v.Bool("auto_create_users"),
+		ParticipantAsCreator: v.Bool("participant_as_creator"),
+	}
+	return out, v.Err()
+}

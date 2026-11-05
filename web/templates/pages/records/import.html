@@ -1,0 +1,57 @@
+{{define "content"}}{{with .Result}}<div class="card mb-3 {{if or (gt .Failed 0) (eq .Total 0)}}border-warning{{else}}border-success{{end}}">
+    <div class="card-header">
+        <div><h3 class="card-title">{{if eq .Total 0}}文件中没有数据行{{else if gt .Failed 0}}导入完成，部分行未导入{{else}}导入完成{{end}}</h3>
+        <div class="card-subtitle">{{default "上传文件" .FileName}}{{if .Format}} · {{.Format}}{{end}}</div></div>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 mb-2">
+            <div class="col-6 col-md-3"><div class="text-secondary">文件行数</div><div class="wl-stat-value">{{.Total}}</div></div>
+            <div class="col-6 col-md-3"><div class="text-secondary">成功导入</div><div class="wl-stat-value text-success">{{.Imported}}</div></div>
+            <div class="col-6 col-md-3"><div class="text-secondary">跳过重复</div><div class="wl-stat-value">{{.Duplicates}}</div></div>
+            <div class="col-6 col-md-3"><div class="text-secondary">失败行</div><div class="wl-stat-value text-danger">{{.Failed}}</div></div>
+        </div>
+        {{if gt (add (add .CreatedCategories .CreatedProjects) .CreatedUsers) 0}}<p class="text-secondary">自动补充：分类 {{.CreatedCategories}} 个、集客项目 {{.CreatedProjects}} 个、历史人员 {{.CreatedUsers}} 名（停用状态，可后续由管理员处理）。</p>{{end}}
+        {{if .Errors}}<div class="table-responsive wl-scroll-300"><table class="table table-sm"><thead><tr><th class="w-1">行号</th><th>未导入原因</th></tr></thead>
+            <tbody>{{range .Errors}}<tr><td>{{.Row}}</td><td>{{.Message}}</td></tr>{{end}}</tbody></table></div>
+            {{if gt .Failed (len .Errors)}}<p class="text-secondary small">仅显示前 {{len .Errors}} 条错误，其余失败行请修正源文件后重试。</p>{{end}}{{end}}
+    </div>
+</div>{{end}}
+<div class="row row-cards">
+<div class="col-lg-7">
+    <form class="card" data-ajax data-multipart data-url="/records/import/ajax" data-action="import" novalidate>
+        <div class="card-header"><h3 class="card-title">{{icon "upload"}} 上传文件</h3></div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label required">导入文件</label>
+                <input class="form-control" type="file" name="file" accept=".csv,.xlsx,.json" required>
+                <div class="form-hint">支持 CSV（老系统导出 / Excel 另存）、Excel（.xlsx，读取第一个工作表）、JSON（本系统导出或含 records 数组）。单个文件不超过 {{.MaxMB}} MB，最多 {{.MaxRows}} 行。</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label required">默认记录人</label>
+                <select class="form-select" name="default_creator_id" data-tom>{{$d := .DefaultCreator}}{{range .Users}}<option value="{{.id}}"{{if same .id $d}} selected{{end}}>{{.name}}{{if .employee_no}}（{{.employee_no}}）{{end}}{{if .department_name}} · {{dept .}}{{end}}</option>{{end}}</select>
+                <div class="form-hint">文件缺少“记录人”列且不能自动判断时使用。</div>
+            </div>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="participant_as_creator" value="1" checked><span class="form-check-label">缺少记录人且只有一名参与人员时，以其作为记录人</span></label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="auto_create_categories" value="1" checked><span class="form-check-label">自动创建不存在的工作分类和集客项目</span></label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="auto_create_users" value="1" checked><span class="form-check-label">自动创建不存在的历史人员（停用状态，不能登录）</span></label>
+        </div>
+        <div class="card-footer d-flex justify-content-between"><a class="btn btn-link" href="/records">返回全部台账</a><button type="submit" class="btn btn-primary">{{icon "import"}}开始导入</button></div>
+    </form>
+</div>
+<div class="col-lg-5">
+    <div class="card mb-3"><div class="card-header"><h3 class="card-title">老系统 CSV 表头</h3></div><div class="card-body">
+        <pre class="mb-2">工作分类,工作内容,日期,参与人员,难易度,次数,集客分类</pre>
+        <ul class="text-secondary small mb-0">
+            <li>表头顺序不限，按列名识别；支持“分类/内容/工作日期/参与人/难度/工作次数/集客项目”等别名。</li>
+            <li>自动识别 UTF-8、GBK/GB18030 编码、BOM 以及逗号/分号/制表符分隔。</li>
+            <li>日期支持 YYYY-MM-DD HH:MM、YYYY/MM/DD、YYYY-MM-DD 与 Excel 日期序列。</li>
+            <li>参与人员可用顿号、逗号、分号、斜杠分隔。</li>
+            <li>难易度留空按 3、次数留空按 1；超出 1–5、1–100 的行会报错。</li>
+            <li>按“日期+分类+项目+内容+难度+次数+记录人+参与人”计算指纹，重复导入自动跳过。</li>
+        </ul>
+    </div></div>
+    <div class="alert alert-warning small">导入只新增记录，不修改或删除已有台账。建议导入前先到“数据备份”下载一份完整备份，并先用小样本文件试导入。</div>
+</div>
+</div>{{end}}
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script><script>WL.initTom(document);</script>{{end}}
