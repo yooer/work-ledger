@@ -1,0 +1,107 @@
+{{define "layout-app"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{.CSRF}}">
+    <title>{{.PageTitle}} · {{.App.Name}}</title>
+    <link rel="icon" href="{{asset "image/favicon.svg"}}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{asset "libs/tabler/css/tabler.min.css"}}">
+    <link rel="stylesheet" href="{{asset "libs/tabler/css/tabler-vendors.min.css"}}">
+    <link rel="stylesheet" href="{{asset "libs/tabler-icons/tabler-icons.min.css"}}">
+    <link rel="stylesheet" href="{{asset "css/app.css"}}">
+    {{block "head" .}}{{end}}
+</head>
+<body>
+<div class="page">
+    <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+        <div class="container-fluid">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="打开菜单">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <a class="navbar-brand navbar-brand-autodark wl-brand" href="/">
+                <span class="wl-brand-mark">{{icon "ledger"}}</span>
+                <span class="wl-brand-copy"><strong>{{.App.Name}}</strong><small>WORK LEDGER</small></span>
+            </a>
+            <div class="collapse navbar-collapse" id="sidebar-menu">
+                <ul class="navbar-nav pt-lg-3">
+                    <li class="nav-item wl-nav-section">日常工作</li>
+                    {{template "nav-item" (dict "Active" .Active "Key" "dashboard" "Href" "/" "Icon" "dashboard" "Label" "工作台")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "my-records" "Href" "/my-records" "Icon" "ledger" "Label" "我的台账")}}
+                    {{if .IsManager}}{{template "nav-item" (dict "Active" .Active "Key" "dept-records" "Href" "/department-records" "Icon" "building" "Label" "部门台账")}}{{end}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "reports" "Href" "/reports/weekly" "Icon" "report" "Label" "周报中心")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "annual" "Href" "/reports/yearly" "Icon" "calendar" "Label" "年度总结")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "period" "Href" "/reports/period" "Icon" "clock" "Label" "时段总结")}}
+                    {{if .IsAdmin}}
+                    <li class="nav-item wl-nav-section">系统管理</li>
+                    {{template "nav-item" (dict "Active" .Active "Key" "records" "Href" "/records" "Icon" "ledger" "Label" "全部台账")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "records-import" "Href" "/records/import" "Icon" "import" "Label" "数据导入")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "people" "Href" "/people" "Icon" "people" "Label" "人员管理")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "departments" "Href" "/departments" "Icon" "building" "Label" "部门管理")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "categories" "Href" "/categories" "Icon" "tag" "Label" "分类管理")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "backup" "Href" "/backup" "Icon" "backup" "Label" "数据备份")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "settings" "Href" "/settings" "Icon" "settings" "Label" "系统与 AI")}}
+                    {{end}}
+                </ul>
+                <div class="wl-sidebar-user mt-auto">
+                    <div class="d-flex align-items-center">
+                        <span class="avatar avatar-sm me-2 bg-primary-lt">{{first (str .User.name)}}</span>
+                        <div class="text-truncate">
+                            <div class="fw-bold text-truncate">{{.User.name}}</div>
+                            <div class="small text-secondary">{{role .User.role}}</div>
+                        </div>
+                    </div>
+                    <div class="small text-secondary mt-2 text-truncate" title="{{.DepartmentLabel}}">{{.DepartmentLabel}}</div>
+                    <div class="wl-user-actions mt-2">
+                        <a href="/security">账号安全</a>
+                        <a href="/password">修改密码</a>
+                        <a href="#" data-logout>退出登录</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+    <div class="page-wrapper">
+        <div class="page-header d-print-none">
+            <div class="container-xl">
+                <div class="row g-2 align-items-center">
+                    <div class="col">
+                        <div class="page-pretitle">工作台账系统</div>
+                        <h2 class="page-title">{{.PageTitle}}</h2>
+                    </div>
+                    <div class="col-auto ms-auto d-print-none">
+                        <div class="btn-list">
+                            <span class="btn btn-ghost-secondary d-none d-md-inline-flex wl-date-chip">{{icon "calendar"}}{{.TodayLabel}}</span>
+                            <a class="btn btn-primary" href="/records/create">{{icon "plus"}}填写台账</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="page-body">
+            <div class="container-xl">
+                {{template "flash" .}}
+                {{template "content" .}}
+            </div>
+        </div>
+        <footer class="footer footer-transparent d-print-none">
+            <div class="container-xl d-flex flex-wrap justify-content-between small text-secondary">
+                <span>{{.App.Name}} · 让每一份工作都有记录</span>
+                <span>{{role .User.role}} · {{.DepartmentLabel}} · v{{.App.Version}}</span>
+            </div>
+        </footer>
+    </div>
+</div>
+<div class="toast-container position-fixed top-0 end-0 p-3" id="wl-toasts"></div>
+<script src="{{asset "libs/tabler/js/tabler.min.js"}}"></script>
+<script src="{{asset "js/app.js"}}"></script>
+{{block "scripts" .}}{{end}}
+</body>
+</html>{{end}}
+
+{{define "nav-item"}}<li class="nav-item{{if eq .Active .Key}} active{{end}}">
+    <a class="nav-link" href="{{.Href}}"{{if eq .Active .Key}} aria-current="page"{{end}}>
+        <span class="nav-link-icon d-md-none d-lg-inline-block">{{icon .Icon}}</span>
+        <span class="nav-link-title">{{.Label}}</span>
+    </a>
+</li>{{end}}

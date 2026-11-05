@@ -1,0 +1,69 @@
+/* 工作台账：全局样式（在 Tabler 之上的少量定制，页面专属样式见各自 css 文件） */
+:root {
+    --tblr-primary: #0f766e;
+    --tblr-primary-rgb: 15, 118, 110;
+    --tblr-primary-darken: #0a5d57;
+    --tblr-font-sans-serif: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
+    --wl-navy: #0d1b2a;
+}
+
+.btn-primary {
+    --tblr-btn-bg: #0f766e;
+    --tblr-btn-border-color: #0f766e;
+    --tblr-btn-hover-bg: #0a5d57;
+    --tblr-btn-hover-border-color: #0a5d57;
+    --tblr-btn-active-bg: #0a5d57;
+    --tblr-btn-active-border-color: #0a5d57;
+}
+
+/* 侧边栏 */
+.navbar-vertical[data-bs-theme="dark"] { background: var(--wl-navy); }
+.wl-brand { display: flex; align-items: center; gap: .6rem; }
+.wl-brand-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.25rem; height: 2.25rem; border-radius: .6rem;
+    background: linear-gradient(135deg, #16a394, #0a5d57); color: #eafffb; font-size: 1.25rem;
+}
+.wl-brand-copy { display: flex; flex-direction: column; line-height: 1.2; text-align: left; }
+.wl-brand-copy small { font-size: .65rem; letter-spacing: .14em; opacity: .6; }
+.wl-nav-section {
+    padding: 1rem 1rem .35rem; font-size: .7rem; letter-spacing: .12em;
+    text-transform: uppercase; color: rgba(255, 255, 255, .45);
+}
+.wl-sidebar-user { padding: 1rem; border-top: 1px solid rgba(255, 255, 255, .08); color: #fff; }
+.wl-user-actions { display: flex; flex-wrap: wrap; gap: .75rem; font-size: .8rem; }
+.wl-user-actions a { color: rgba(255, 255, 255, .7); }
+.wl-user-actions a:hover { color: #fff; }
+.wl-date-chip { pointer-events: none; }
+#sidebar-menu { display: flex; flex-direction: column; }
+
+/* 提示 */
+.wl-flash-stack { margin-bottom: 1rem; }
+#wl-toasts { z-index: 2000; max-width: 420px; }
+.wl-toast { margin-bottom: .5rem; background: #fff; }
+
+/* 难易度徽章 */
+.wl-difficulty { font-weight: 500; }
+.wl-difficulty b { margin-right: .15rem; }
+.wl-difficulty-1 { background: #edf9f1; color: #15803d; }
+.wl-difficulty-2 { background: #e7f5f2; color: #0f766e; }
+.wl-difficulty-3 { background: #eaf0ff; color: #2563eb; }
+.wl-difficulty-4 { background: #fff5e6; color: #b45309; }
+.wl-difficulty-5 { background: #fff0f3; color: #be123c; }
+
+/* 通用 */
+.wl-stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+.wl-muted { color: var(--tblr-secondary); }
+.wl-pre { white-space: pre-wrap; word-break: break-word; }
+.wl-error-code { font-size: .8rem; font-weight: 700; letter-spacing: .12em; color: #0f766e; margin-bottom: .75rem; }
+.wl-markdown h1, .wl-markdown h2, .wl-markdown h3 { margin-top: 1.25rem; }
+.wl-markdown table { margin: 1rem 0; }
+.wl-markdown blockquote { border-left: 3px solid #0f766e; padding-left: 1rem; color: var(--tblr-secondary); }
+.wl-filter-card .form-label { font-size: .8rem; }
+.wl-chart { min-height: 260px; }
+.wl-table-content { max-width: 420px; }
+
+@media print {
+    .navbar-vertical, .page-header, .footer, .wl-no-print { display: none !important; }
+    .page-wrapper { margin: 0 !important; }
+}

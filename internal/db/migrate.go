@@ -1,0 +1,87 @@
+package db
+
+import (
+	_ "embed"
+	"regexp"
+	"strings"
+)
+
+//go:embed schema.sql
+var schemaSQL string
+
+var commentLine = regexp.MustCompile(`(?m)^\s*--.*$`)
+
+// Migrate 建表并补齐旧版本缺失的字段/索引（与 PHP 版 install.php 的升级逻辑一致），可重复执行。
+// 返回执行过的升级说明。
+func (d *DB) Migrate() ([]string, error) {
+	var notes []string
+	sqlText := commentLine.ReplaceAllString(schemaSQL, "")
+	for _, stmt := range strings.Split(sqlText, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := d.Exec(stmt); err != nil {
+			return notes, err
+		}
+	}
+
+	cols, err := d.columns("users")
+	if err != nil {
+		return notes, err
+	}
+	userCols := []struct{ name, def string }{
+		{"totp_secret", "TEXT NULL"},
+		{"totp_enabled", "INTEGER NOT NULL DEFAULT 0"},
+		{"totp_recovery_codes", "TEXT NULL"},
+		{"totp_last_used_step", "INTEGER NULL"},
+	}
+	for _, c := range userCols {
+		if !cols[c.name] {
+			if _, err := d.Exec("ALTER TABLE users ADD COLUMN " + c.name + " " + c.def); err != nil {
+				return notes, err
+			}
+			notes = append(notes, "已补充 users."+c.name+" 字段。")
+		}
+	}
+
+	recCols, err := d.columns("work_records")
+	if err != nil {
+		return notes, err
+	}
+	if !recCols["import_hash"] {
+		if _, err := d.Exec("ALTER TABLE work_records ADD COLUMN import_hash TEXT NULL"); err != nil {
+			return notes, err
+		}
+		notes = append(notes, "已补充 work_records.import_hash 字段。")
+	}
+	idx, err := All(d, "PRAGMA index_list(work_records)")
+	if err != nil {
+		return notes, err
+	}
+	hasIdx := false
+	for _, r := range idx {
+		if strings.EqualFold(r.Str("name"), "ux_work_records_import_hash") {
+			hasIdx = true
+		}
+	}
+	if !hasIdx {
+		if _, err := d.Exec("CREATE UNIQUE INDEX ux_work_records_import_hash ON work_records (import_hash)"); err != nil {
+			return notes, err
+		}
+		notes = append(notes, "已创建 work_records.import_hash 唯一索引。")
+	}
+	return notes, nil
+}
+
+func (d *DB) columns(table string) (map[string]bool, error) {
+	rows, err := All(d, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, r := range rows {
+		out[strings.ToLower(r.Str("name"))] = true
+	}
+	return out, nil
+}

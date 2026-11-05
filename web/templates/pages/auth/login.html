@@ -1,0 +1,28 @@
+{{define "content"}}<div class="card card-md">
+    <div class="card-body">
+        <div class="text-secondary small mb-1">欢迎回来</div>
+        <h2 class="h2 mb-2">登录工作台账</h2>
+        <p class="text-secondary mb-4">使用管理员分配的员工账号登录系统。</p>
+        <form data-ajax data-url="/auth/ajax" data-action="login" autocomplete="on" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="login-username">登录账号</label>
+                <div class="input-icon">
+                    <span class="input-icon-addon">{{icon "user"}}</span>
+                    <input class="form-control" id="login-username" type="text" name="username" placeholder="用户名或员工工号"
+                           autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="login-password">密码</label>
+                <div class="input-group input-group-flat">
+                    <input class="form-control" type="password" name="password" id="login-password" placeholder="请输入登录密码" autocomplete="current-password" required>
+                    <span class="input-group-text"><a href="#" class="link-secondary" data-password-toggle="login-password">显示</a></span>
+                </div>
+            </div>
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary w-100">登录系统 {{icon "arrow"}}</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="alert alert-info mt-3 small">账号由管理员统一创建。启用二次验证的账号在密码验证后还需输入 TOTP 动态码；忘记密码请联系系统管理员重置。</div>{{end}}

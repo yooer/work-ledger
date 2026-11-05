@@ -1,0 +1,22 @@
+{{define "flash"}}{{if .Flashes}}<div class="wl-flash-stack" aria-live="polite">
+{{range .Flashes}}<div class="alert alert-{{if eq .type "error"}}danger{{else}}{{.type}}{{end}} alert-dismissible{{if eq .type "success"}} wl-autohide{{end}}" role="alert">
+    <div class="d-flex align-items-center gap-2">
+        {{if eq .type "success"}}{{icon "check"}}{{else if eq .type "info"}}{{icon "info"}}{{else}}{{icon "warning"}}{{end}}
+        <div>{{.message}}</div>
+    </div>
+    <a class="btn-close" data-bs-dismiss="alert" aria-label="关闭提示"></a>
+</div>{{end}}
+</div>{{end}}{{end}}
+
+{{define "pager"}}{{if gt .Pages 1}}<ul class="pagination m-0 ms-auto">
+{{range .Links}}{{if .Ellipsis}}<li class="page-item disabled"><span class="page-link">…</span></li>
+{{else if .Disabled}}<li class="page-item disabled"><span class="page-link">{{.Label}}</span></li>
+{{else}}<li class="page-item{{if .Current}} active{{end}}"><a class="page-link" href="{{.URL}}">{{.Label}}</a></li>{{end}}
+{{end}}</ul>{{end}}{{end}}
+
+{{define "difficulty-badge"}}<span class="badge wl-difficulty wl-difficulty-{{.}}"><b>{{.}}</b> {{difficulty .}}</span>{{end}}
+
+{{define "empty"}}<div class="empty">
+    <div class="empty-icon">{{icon "ledger"}}</div>
+    <p class="empty-title">{{.}}</p>
+</div>{{end}}

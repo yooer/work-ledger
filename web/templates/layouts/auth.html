@@ -1,0 +1,33 @@
+{{define "layout-auth"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{.CSRF}}">
+    <title>{{.PageTitle}} · {{.App.Name}}</title>
+    <link rel="icon" href="{{asset "image/favicon.svg"}}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{asset "libs/tabler/css/tabler.min.css"}}">
+    <link rel="stylesheet" href="{{asset "libs/tabler-icons/tabler-icons.min.css"}}">
+    <link rel="stylesheet" href="{{asset "css/app.css"}}">
+    <link rel="stylesheet" href="{{asset "css/auth.css"}}">
+</head>
+<body class="d-flex flex-column wl-auth-body">
+<div class="page page-center">
+    <div class="container container-tight py-4">
+        <div class="text-center mb-4">
+            <a href="/" class="wl-auth-brand">
+                <span class="wl-brand-mark">{{icon "ledger"}}</span>
+                <span class="wl-auth-name">{{.App.Name}}</span>
+            </a>
+        </div>
+        {{template "flash" .}}
+        {{template "content" .}}
+        <div class="text-center text-secondary mt-3 small">WORK LEDGER · v{{.App.Version}}</div>
+    </div>
+</div>
+<div class="toast-container position-fixed top-0 end-0 p-3" id="wl-toasts"></div>
+<script src="{{asset "libs/tabler/js/tabler.min.js"}}"></script>
+<script src="{{asset "js/app.js"}}"></script>
+{{block "scripts" .}}{{end}}
+</body>
+</html>{{end}}

@@ -1,0 +1,5 @@
+/* 账号安全页 */
+.wl-recovery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; }
+.wl-recovery-grid code { display: block; padding: .5rem; text-align: center; font-size: 1rem; letter-spacing: .08em; }
+.wl-secret { font-size: 1.05rem; letter-spacing: .1em; }
+.wl-uri { word-break: break-all; white-space: normal; }

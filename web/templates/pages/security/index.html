@@ -1,0 +1,102 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/security.css"}}">{{end}}
+{{define "content"}}{{$st := .State}}
+{{if .Require2FA}}{{if not $st.TOTPEnabled}}<div class="alert alert-warning">管理员要求所有用户启用二次验证，请先完成 TOTP 绑定后再使用其他功能。</div>{{end}}{{end}}
+{{if $st.RecoveryCodes}}<div class="card mb-3 border-warning">
+    <div class="card-header"><h3 class="card-title">请立即保存恢复码</h3><span class="badge bg-warning-lt ms-auto">只显示一次</span></div>
+    <div class="card-body">
+        <p class="text-secondary">这些恢复码可用于在手机丢失、验证器无法使用时登录。每个恢复码只能使用一次。刷新页面后将不再显示，请复制或打印保存到安全位置。</p>
+        <div class="wl-recovery-grid">{{range $st.RecoveryCodes}}<code>{{.}}</code>{{end}}</div>
+        <button type="button" class="btn btn-outline-primary mt-3" data-copy-text="{{join $st.RecoveryCodes "\n"}}">复制全部恢复码</button>
+    </div>
+</div>{{end}}
+<div class="row row-cards">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">TOTP 二次验证</h3>
+                <span class="badge ms-auto {{if $st.TOTPEnabled}}bg-success-lt{{else}}bg-secondary-lt{{end}}">{{if $st.TOTPEnabled}}已启用{{else}}未启用{{end}}</span>
+            </div>
+            <div class="card-body">
+            {{if $st.SetupSecret}}
+                <h4>1. 在验证器中添加账号</h4>
+                <p class="text-secondary">打开 Google Authenticator、Microsoft Authenticator、1Password 等支持 TOTP 的应用，选择“手动输入密钥”，然后填写：</p>
+                <dl class="row">
+                    <dt class="col-3">账号</dt><dd class="col-9">{{.User.username}}</dd>
+                    <dt class="col-3">密钥</dt><dd class="col-9"><code class="wl-secret">{{$st.SetupSecretFmt}}</code></dd>
+                    <dt class="col-3">类型</dt><dd class="col-9">基于时间（TOTP），30 秒，6 位</dd>
+                </dl>
+                <div class="mb-4">
+                    <span class="text-secondary">也可复制 otpauth 链接：</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-text="{{$st.ProvisioningURI}}">复制链接</button>
+                    <code class="d-block mt-2 wl-uri">{{$st.ProvisioningURI}}</code>
+                </div>
+                <h4>2. 输入验证器中的动态码</h4>
+                <form data-ajax data-url="/security/ajax" data-action="enable_totp" class="row g-2 align-items-start" novalidate>
+                    <div class="col-sm-6">
+                        <input class="form-control wl-otp-input" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required autofocus>
+                    </div>
+                    <div class="col-sm-6 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">{{icon "check"}}启用 2FA</button>
+                        <button type="button" class="btn btn-link" data-ajax-click data-url="/security/ajax" data-action="cancel_totp">取消本次绑定</button>
+                    </div>
+                </form>
+            {{else if not $st.TOTPEnabled}}
+                <div class="empty">
+                    <div class="empty-icon">{{icon "shield"}}</div>
+                    <p class="empty-title">尚未启用二次验证</p>
+                    <p class="empty-subtitle text-secondary">启用后，即使密码泄露，攻击者也需要你的手机或验证器才能登录。建议所有用户启用。</p>
+                    <div class="empty-action">
+                        <button type="button" class="btn btn-primary" data-ajax-click data-url="/security/ajax" data-action="start_totp">{{icon "spark"}}开始设置 TOTP</button>
+                    </div>
+                </div>
+            {{else}}
+                <div class="alert alert-success">
+                    <strong>二次验证已启用</strong>：登录时需要密码和动态验证码。当前剩余恢复码：<b>{{$st.RecoveryCodeCount}}</b> 个。
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <form class="border rounded p-3 h-100" data-ajax data-url="/security/ajax" data-action="regenerate_recovery" data-confirm="重新生成后旧恢复码将全部失效，确定继续？" novalidate>
+                            <h4>重新生成恢复码</h4>
+                            <p class="text-secondary small">需要当前密码和动态验证码。生成后旧恢复码立即失效。</p>
+                            <div class="mb-2"><label class="form-label">当前密码</label><input class="form-control" type="password" name="password" autocomplete="current-password" required></div>
+                            <div class="mb-3"><label class="form-label">动态码或恢复码</label><input class="form-control" type="text" name="code" autocomplete="one-time-code" required></div>
+                            <button type="submit" class="btn btn-outline-primary w-100">生成新的恢复码</button>
+                        </form>
+                    </div>
+                    <div class="col-md-6">
+                        <form class="border border-danger rounded p-3 h-100" data-ajax data-url="/security/ajax" data-action="disable_totp" data-confirm="停用 2FA 后，登录将只使用密码。确定继续？" novalidate>
+                            <h4 class="text-danger">停用二次验证</h4>
+                            <p class="text-secondary small">停用会降低账号安全性。若只是更换手机，建议保留 2FA 并使用恢复码登录后重新绑定。</p>
+                            <div class="mb-2"><label class="form-label">当前密码</label><input class="form-control" type="password" name="password" autocomplete="current-password" required></div>
+                            <div class="mb-3"><label class="form-label">动态码或恢复码</label><input class="form-control" type="text" name="code" autocomplete="one-time-code" required></div>
+                            <button type="submit" class="btn btn-outline-danger w-100">停用 2FA</button>
+                        </form>
+                    </div>
+                </div>
+            {{end}}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h4>{{icon "warning"}} 请妥善保管恢复码</h4>
+            <p class="text-secondary mb-0">恢复码只在启用或重新生成时显示一次。手机丢失时，可使用任一未使用的恢复码登录。</p>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
+            <h4>{{icon "clock"}} 验证器时间要准确</h4>
+            <p class="text-secondary mb-0">动态码基于时间生成，请开启手机自动校时。若多次验证失败，请检查验证器时间或联系管理员重置 2FA。</p>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h4>需要帮助？</h4>
+            <p class="text-secondary mb-2">如果验证器和恢复码都无法使用，请联系系统管理员。管理员可在“人员管理”中重置你的二次验证。</p>
+            <a href="/password" class="btn btn-outline-secondary btn-sm">{{icon "key"}}修改登录密码</a>
+        </div></div>
+    </div>
+</div>{{end}}
+{{define "scripts"}}<script>
+document.querySelectorAll('[data-copy-text]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(btn.dataset.copyText).then(function () { WL.toast('success', '已复制到剪贴板'); });
+    });
+});
+</script>{{end}}

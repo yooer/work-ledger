@@ -1,0 +1,7 @@
+/* 登录、二次验证等认证页 */
+.wl-auth-body { background: linear-gradient(160deg, #f3f6f9 0%, #e7f5f2 100%); min-height: 100vh; }
+.wl-auth-brand { display: inline-flex; align-items: center; gap: .6rem; color: #0d1b2a; text-decoration: none; }
+.wl-auth-brand:hover { text-decoration: none; color: #0f766e; }
+.wl-auth-name { font-size: 1.35rem; font-weight: 700; }
+.wl-auth-body .card { border-radius: 1rem; box-shadow: 0 24px 60px rgba(20, 40, 70, .09); }
+.wl-otp-input { font-size: 1.5rem; letter-spacing: .4em; text-align: center; font-variant-numeric: tabular-nums; }

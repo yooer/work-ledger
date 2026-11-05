@@ -1,0 +1,13 @@
+/dist/
+/bin/
+/data/
+/backups/
+/logs/
+/tmp/
+/config/.env
+.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+/work-ledger
+/work-ledger.exe

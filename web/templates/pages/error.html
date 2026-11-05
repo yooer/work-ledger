@@ -1,0 +1,8 @@
+{{define "content"}}<div class="card card-md">
+    <div class="card-body text-center">
+        <div class="wl-error-code">ERROR {{.Status}}</div>
+        <h2 class="mb-3">{{.Title}}</h2>
+        <p class="text-secondary">{{.Message}}</p>
+        <a class="btn btn-primary mt-3" href="/">{{icon "arrow"}}返回工作台</a>
+    </div>
+</div>{{end}}

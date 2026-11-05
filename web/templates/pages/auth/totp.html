@@ -1,0 +1,22 @@
+{{define "content"}}<div class="card card-md">
+    <div class="card-body">
+        <div class="text-secondary small mb-1">Two-factor authentication</div>
+        <h2 class="h2 mb-2">二次验证</h2>
+        <p class="text-secondary mb-4">账号 <strong>{{.Pending.name}}</strong> 已启用 TOTP 二次验证，请输入验证器中的 6 位动态码。</p>
+        <form data-ajax data-url="/auth/ajax" data-action="verify_2fa" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="totp-code">动态验证码 / 恢复码</label>
+                <input class="form-control wl-otp-input" id="totp-code" type="text" name="code" placeholder="000000"
+                       autocomplete="one-time-code" inputmode="text" autocapitalize="characters" spellcheck="false" required autofocus>
+                <div class="form-hint">6 位数字，或 XXXXX-XXXXX 格式的恢复码。</div>
+            </div>
+            <div class="form-footer">
+                <button type="submit" class="btn btn-primary w-100">验证并登录 {{icon "arrow"}}</button>
+            </div>
+        </form>
+        <div class="text-center mt-3">
+            <a href="#" class="link-secondary" data-ajax-click data-url="/auth/ajax" data-action="cancel_2fa">取消，返回登录</a>
+        </div>
+    </div>
+</div>
+<div class="alert alert-info mt-3 small">动态码每 30 秒更新。若手机丢失，可使用启用 2FA 时保存的恢复码，或联系管理员重置二次验证。</div>{{end}}
