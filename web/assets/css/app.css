@@ -18,7 +18,9 @@
 
 /* 侧边栏 */
 .navbar-vertical[data-bs-theme="dark"] { background: var(--wl-navy); }
-.wl-brand { display: flex; align-items: center; gap: .6rem; }
+.wl-brand { display: flex; align-items: center; justify-content: flex-start; gap: .6rem; }
+.navbar-vertical .navbar-brand.wl-brand { justify-content: flex-start !important; padding-left: 1rem; padding-right: 1rem; }
+.wl-brand-copy { flex: 0 0 auto; }
 .wl-brand-mark {
     display: inline-flex; align-items: center; justify-content: center;
     width: 2.25rem; height: 2.25rem; border-radius: .6rem;

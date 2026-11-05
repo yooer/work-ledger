@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,7 +60,11 @@ func Bootstrap(cfg *config.Config, log *slog.Logger) (*db.DB, *service.Services,
 
 // Handler 构建完整 HTTP 处理器（也用于测试）。
 func Handler(cfg *config.Config, s *service.Services, log *slog.Logger) (http.Handler, error) {
-	views, err := web.LoadViews(webassets.FS, Version)
+	assetVersion := Version
+	if Version == "dev" {
+		assetVersion = "dev" + strconv.FormatInt(time.Now().Unix(), 10) // 开发版每次启动刷新静态资源缓存
+	}
+	views, err := web.LoadViews(webassets.FS, assetVersion)
 	if err != nil {
 		return nil, fmt.Errorf("模板解析失败：%w", err)
 	}

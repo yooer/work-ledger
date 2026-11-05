@@ -219,7 +219,8 @@
         if (typeof window.TomSelect === 'undefined') return;
         $$('select[data-tom]', root).forEach((el) => {
             if (el.tomselect) return;
-            const opts = { allowEmptyOption: true, maxOptions: 500, plugins: el.multiple ? ['remove_button'] : [] };
+            // Tabler 附带的是 tom-select 精简版（不含插件），多选项可用退格键删除。
+            const opts = { allowEmptyOption: true, maxOptions: 500, hidePlaceholder: false };
             if (el.dataset.placeholder) opts.placeholder = el.dataset.placeholder;
             new window.TomSelect(el, opts);
         });
