@@ -104,3 +104,17 @@ func ImportOptions(in Input) (any, error) {
 	}
 	return out, v.Err()
 }
+
+// RestoreInput 恢复确认（文件本身在 controller 中检查）。
+type RestoreInput struct{}
+
+func Restore(in Input) (any, error) {
+	v := New(in)
+	if !v.Bool("confirm_restore") {
+		v.Fail("confirm_restore", "请勾选确认项。")
+	}
+	if v.Raw("confirm_text") != "恢复" {
+		v.Fail("confirm_text", "请输入“恢复”两个字以确认。")
+	}
+	return RestoreInput{}, v.Err()
+}

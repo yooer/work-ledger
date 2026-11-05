@@ -1,0 +1,49 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
+{{define "content"}}<div class="row row-cards">
+<div class="col-lg-7">
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">{{icon "download"}} 下载完整备份</h3></div>
+        <div class="card-body">
+            <p class="text-secondary">备份包含全部 10 张业务表：用户（含密码哈希与 2FA）、部门、分类、台账、参与人员、周报、年度总结、时段总结和系统设置。<strong>不包含</strong>配置文件 .env、AI Key、日志和备份文件本身。格式与 PHP 版一致，两个版本可互相恢复。</p>
+            <div class="btn-list">
+                <a class="btn btn-primary" href="/backup/download?format=gz">{{icon "download"}}下载压缩备份（.json.gz）</a>
+                <a class="btn btn-outline-primary" href="/backup/download?format=json">下载未压缩 JSON</a>
+                <button type="button" class="btn btn-outline-secondary" data-ajax-click data-url="/backup/ajax" data-action="snapshot">{{icon "backup"}}创建本地快照</button>
+            </div>
+            <div class="alert alert-warning mt-3 mb-0 small">备份包含密码哈希、TOTP 密钥和工作内容，敏感程度等同数据库文件，请勿通过公开渠道传输。</div>
+        </div>
+    </div>
+    <form class="card mb-3 border-danger" data-ajax data-multipart data-url="/backup/ajax" data-action="restore" data-confirm="确定用备份覆盖当前全部数据吗？此操作会替换所有用户、台账和报告。" novalidate>
+        <div class="card-header"><h3 class="card-title text-danger">{{icon "upload"}} 从备份恢复（覆盖）</h3></div>
+        <div class="card-body">
+            <ol class="text-secondary small">
+                <li>系统会先校验格式、版本、字段、行数，以及至少一名启用状态的管理员；</li>
+                <li>自动在本地创建 <code>pre-restore-*</code> 安全快照；</li>
+                <li>在一个数据库事务中清空当前业务表并写入备份，失败自动回滚；</li>
+                <li>成功后所有用户会被强制退出，需要用备份中的管理员账号重新登录。</li>
+            </ol>
+            <div class="mb-3"><label class="form-label required">备份文件</label><input class="form-control" type="file" name="backup_file" accept=".json,.gz" required>
+                <div class="form-hint">支持 .json / .json.gz，上传不超过 {{.MaxUploadMB}} MB，解压后不超过 {{.MaxJSONMB}} MB。</div></div>
+            <label class="form-check" data-field><input class="form-check-input" type="checkbox" name="confirm_restore" value="1"><span class="form-check-label">我已了解：恢复是覆盖而不是合并，当前库中备份之外的数据将被删除。</span></label>
+            <div class="mb-0 mt-2"><label class="form-label required">请输入“恢复”两个字确认</label><input class="form-control" type="text" name="confirm_text" autocomplete="off" required></div>
+        </div>
+        <div class="card-footer text-end"><button type="submit" class="btn btn-danger">{{icon "refresh"}}执行恢复</button></div>
+    </form>
+</div>
+<div class="col-lg-5">
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">当前数据</h3><span class="ms-auto text-secondary small">数据库 {{.DBSize}}</span></div>
+        <div class="table-responsive"><table class="table table-sm card-table">
+            <tbody>{{$c := .Counts}}{{range .Tables}}<tr><td><code>{{.}}</code></td><td class="text-end">{{index $c .}}</td></tr>{{end}}</tbody>
+        </table></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">本地快照</h3></div>
+        <div class="card-body py-2 small text-secondary">目录：<code>{{.BackupDir}}</code>（不在 Web 目录中，建议定期转存到离线位置）</div>
+        {{if .Files}}<div class="list-group list-group-flush wl-scroll-300">{{range .Files}}<div class="list-group-item d-flex align-items-center">
+            <div class="flex-fill text-truncate"><div class="text-truncate">{{.Name}}</div><div class="small text-secondary">{{.Time}} · {{.SizeText}} · {{.Kind}}{{if .PreRestore}} · <span class="text-warning">恢复前快照</span>{{end}}</div></div>
+            <a class="btn btn-sm btn-ghost-primary" href="/backup/local?file={{.Name}}">{{icon "download"}}</a>
+        </div>{{end}}</div>{{else}}<div class="card-body text-secondary">暂无本地快照。</div>{{end}}
+    </div>
+</div>
+</div>{{end}}

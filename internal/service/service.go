@@ -35,6 +35,7 @@ type Services struct {
 	Dashboard  *Dashboard
 	Import     *Importer
 	Export     *Exporter
+	Backup     *Backup
 }
 
 func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
@@ -55,6 +56,7 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Dashboard = &Dashboard{Core: core, Records: s.Records, Settings: s.Settings}
 	s.Import = &Importer{Core: core}
 	s.Export = &Exporter{Core: core, Records: s.Records}
+	s.Backup = &Backup{Core: core}
 	return s
 }
 

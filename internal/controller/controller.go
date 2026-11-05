@@ -24,6 +24,7 @@ func Register(app *web.App, s *service.Services) {
 	c.registerAPI(app.Mux)
 	c.registerSettings(app)
 	c.registerTransfer(app)
+	c.registerBackup(app)
 }
 
 // sess 把会话适配为 service.KV。
