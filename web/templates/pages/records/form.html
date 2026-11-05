@@ -1,0 +1,127 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/records.css"}}">{{end}}
+{{define "content"}}{{$o := .Old}}
+{{if not .Categories}}<div class="alert alert-warning">当前没有可用的工作分类，请联系管理员在“分类管理”中新增或启用分类。</div>{{end}}
+<form data-ajax data-url="/records/ajax" data-action="{{if .IsEdit}}update{{else}}create{{end}}" novalidate>
+<input type="hidden" name="id" value="{{$o.id}}">
+<div class="row row-cards">
+<div class="col-lg-8">
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">01 · 工作信息</h3></div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label required" for="r-cat">工作分类</label>
+                    <select class="form-select" id="r-cat" name="work_category_id" data-category-select required>
+                        <option value="">请选择工作分类</option>
+                        {{range .Categories}}<option value="{{.id}}" data-customer="{{.is_customer_project}}"{{if same .id $o.work_category_id}} selected{{end}}>{{.name}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+                    </select>
+                    <div class="form-hint">选择“集客业务”时需要填写具体项目子分类。</div>
+                </div>
+                <div class="col-md-6 mb-3" data-project-field>
+                    <label class="form-label required" for="r-proj">集客项目子分类</label>
+                    <select class="form-select" id="r-proj" name="project_category_id" data-project-select>
+                        <option value="">请选择集客项目</option>
+                        {{range .Projects}}<option value="{{.id}}" data-work-category="{{.work_category_id}}"{{if same .id $o.project_category_id}} selected{{end}}>{{.name}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+                    </select>
+                    <div class="form-hint">子分类可由管理员维护，但不会被删除。</div>
+                </div>
+            </div>
+            <div class="mb-1">
+                <label class="form-label required" for="r-content">工作内容</label>
+                <textarea class="form-control" id="r-content" name="content" rows="6" maxlength="5000" required placeholder="请具体描述完成的工作、处理的问题、交付结果等…" data-count-target="#r-count">{{$o.content}}</textarea>
+                <div class="d-flex justify-content-between form-hint"><span>建议包含对象、动作和结果，便于周报准确汇总。</span><span><span id="r-count">0</span> / 5000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title">02 · 时间与投入</h3></div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <label class="form-label required" for="r-at">工作日期时间</label>
+                    <input class="form-control" id="r-at" type="datetime-local" name="work_at" step="60" value="{{$o.work_at}}" required>
+                    <div class="form-hint">精确到分钟。</div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label required" for="r-count-input">具体工作项目次数</label>
+                    <div class="input-group">
+                        <button class="btn" type="button" data-step="-1" aria-label="减少">−</button>
+                        <input class="form-control text-center" id="r-count-input" type="number" name="work_count" min="1" max="100" step="1" value="{{$o.work_count}}" required>
+                        <button class="btn" type="button" data-step="1" aria-label="增加">+</button>
+                    </div>
+                    <div class="form-hint">默认 1 次，最多 100 次。</div>
+                </div>
+            </div>
+            <label class="form-label required">难易度</label>
+            <div class="form-selectgroup wl-difficulty-picker" data-field>
+                {{range seq 1 5}}<label class="form-selectgroup-item">
+                    <input type="radio" name="difficulty" value="{{.}}" class="form-selectgroup-input"{{if same . $o.difficulty}} checked{{end}}>
+                    <span class="form-selectgroup-label"><b>{{.}}</b> <small>{{difficulty .}}</small></span>
+                </label>{{end}}
+            </div>
+            <div class="form-hint">1 级最易，5 级最难。</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">03 · 参与人员</h3><span class="ms-auto text-secondary small">可搜索姓名、工号或部门，可多选</span></div>
+        <div class="card-body" data-field>
+            <select name="participant_ids[]" multiple data-tom data-placeholder="选择参与人员…" required>
+                {{$sel := .Selected}}{{range .People}}<option value="{{.id}}"{{if inIDs $sel .id}} selected{{end}}>{{.name}}{{if .employee_no}} · {{.employee_no}}{{end}}{{if .department_name}} · {{dept .}}{{end}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+            </select>
+            <div class="form-hint mt-2">默认包含当前记录人；至少选择一人。</div>
+        </div>
+    </div>
+</div>
+<div class="col-lg-4">
+    <div class="card wl-sticky">
+        <div class="card-body">
+            <h3>{{if .IsEdit}}保存修改{{else}}提交记录{{end}}</h3>
+            <p class="text-secondary">保存后，记录将进入台账并参与周报统计。</p>
+            <button type="submit" class="btn btn-primary w-100 mb-2">{{icon "check"}}{{if .IsEdit}}保存修改{{else}}保存工作记录{{end}}</button>
+            <a class="btn btn-outline-secondary w-100" href="{{.CancelURL}}">取消</a>
+            {{if .IsEdit}}<hr>
+            <dl class="row small mb-0">
+                <dt class="col-5">记录创建者</dt><dd class="col-7">{{.Record.creator_name}}</dd>
+                <dt class="col-5">创建时间</dt><dd class="col-7">{{dt (str .Record.created_at)}}</dd>
+                <dt class="col-5">最后编辑用户</dt><dd class="col-7">{{.Record.editor_name}}</dd>
+                <dt class="col-5">最后编辑时间</dt><dd class="col-7">{{dt (str .Record.updated_at)}}</dd>
+            </dl>{{end}}
+        </div>
+    </div>
+    <div class="alert alert-info mt-3 small"><strong>写好台账的小建议：</strong>写清“为谁、做了什么、结果如何”；合理设置难易度和重复次数，AI 生成的周报会更准确。</div>
+</div>
+</div>
+</form>{{end}}
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script>
+(function () {
+    WL.initTom(document);
+    var cat = document.querySelector('[data-category-select]');
+    var field = document.querySelector('[data-project-field]');
+    var proj = document.querySelector('[data-project-select]');
+    function apply(reset) {
+        var opt = cat.options[cat.selectedIndex];
+        var isCustomer = opt && opt.dataset.customer === '1';
+        field.classList.toggle('d-none', !isCustomer);
+        Array.from(proj.options).forEach(function (o) {
+            if (!o.value) return;
+            var match = o.dataset.workCategory === cat.value;
+            o.hidden = !match;
+            o.disabled = !match;
+        });
+        if (reset || !isCustomer) {
+            var sel = proj.options[proj.selectedIndex];
+            if (!isCustomer || (sel && sel.disabled)) proj.value = '';
+        }
+    }
+    cat.addEventListener('change', function () { apply(true); });
+    apply(false);
+    var count = document.querySelector('input[name="work_count"]');
+    document.querySelectorAll('[data-step]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var v = parseInt(count.value || '1', 10) + parseInt(b.dataset.step, 10);
+            count.value = Math.max(1, Math.min(100, v));
+        });
+    });
+})();
+</script>{{end}}

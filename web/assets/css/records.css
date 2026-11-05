@@ -1,0 +1,6 @@
+/* 台账列表、表单、详情 */
+.wl-record-table td { vertical-align: top; }
+.wl-difficulty-picker .form-selectgroup-label { min-width: 5.5rem; }
+.wl-difficulty-picker .form-selectgroup-label b { font-size: 1.1rem; margin-right: .25rem; }
+.wl-sticky { position: sticky; top: 1rem; }
+.ts-wrapper.is-invalid .ts-control { border-color: var(--tblr-danger); }

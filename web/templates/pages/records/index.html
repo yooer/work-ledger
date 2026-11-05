@@ -1,0 +1,65 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/records.css"}}">{{end}}
+{{define "content"}}{{$m := .Mode}}{{$f := .Filter}}
+{{if eq $m.Key "dept"}}<div class="alert alert-info">当前部门范围：<strong>{{.DeptLabel}}</strong>（含二级子部门，按台账创建时的部门归属统计）。你可以查看和导出，但只能编辑自己创建的记录。</div>{{end}}
+{{if eq $m.Key "mine"}}<div class="alert alert-info">这里只展示由你本人创建的工作记录。</div>{{end}}
+<div class="card mb-3 wl-filter-card">
+    <div class="card-body">
+        <form method="get" action="{{$m.BaseURL}}" class="row g-2 align-items-end">
+            <div class="col-6 col-md-2"><label class="form-label">开始日期</label><input class="form-control" type="text" name="from" value="{{$f.From}}" placeholder="YYYY-MM-DD" data-datepicker></div>
+            <div class="col-6 col-md-2"><label class="form-label">结束日期</label><input class="form-control" type="text" name="to" value="{{$f.To}}" placeholder="YYYY-MM-DD" data-datepicker></div>
+            <div class="col-6 col-md-2"><label class="form-label">工作分类</label>
+                <select class="form-select" name="category_id"><option value="0">全部分类</option>
+                {{range .Categories}}<option value="{{.id}}"{{if same .id $f.CategoryID}} selected{{end}}>{{.name}}</option>{{end}}</select></div>
+            <div class="col-6 col-md-2"><label class="form-label">集客项目</label>
+                <select class="form-select" name="project_id"><option value="0">全部项目</option>
+                {{range .Projects}}<option value="{{.id}}"{{if same .id $f.ProjectID}} selected{{end}}>{{.name}}</option>{{end}}</select></div>
+            {{if $m.ShowEmployee}}<div class="col-6 col-md-2"><label class="form-label">记录人</label>
+                <select class="form-select" name="employee_id" data-tom><option value="0">全部员工</option>
+                {{range .Employees}}<option value="{{.id}}"{{if same .id $f.EmployeeID}} selected{{end}}>{{.name}}{{if .employee_no}}（{{.employee_no}}）{{end}}{{if ne .is_active 1}} · 停用{{end}}</option>{{end}}</select></div>{{end}}
+            {{if $m.ShowDept}}<div class="col-6 col-md-2"><label class="form-label">部门</label>
+                <select class="form-select" name="department_id" data-tom><option value="0">全部部门</option>
+                {{range .Departments}}<option value="{{.id}}"{{if same .id $f.DepartmentID}} selected{{end}}>{{.label}}</option>{{end}}</select></div>{{end}}
+            <div class="col-12 col-md-3"><label class="form-label">关键词</label><input class="form-control" type="search" name="q" value="{{$f.Q}}" placeholder="内容、记录人、分类、参与人"></div>
+            <div class="col-12 col-md-auto d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}查询</button><a class="btn btn-link" href="{{$m.BaseURL}}">重置</a></div>
+        </form>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">共 {{.Result.Total}} 条记录</h3>
+        <div class="card-actions btn-list">
+            <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">{{icon "export"}}导出当前筛选结果</button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <a class="dropdown-item" href="/records/export?format=csv&{{.ExportQuery}}">CSV（Excel 可直接打开）</a>
+                    <a class="dropdown-item" href="/records/export?format=xlsx&{{.ExportQuery}}">Excel（.xlsx）</a>
+                    <a class="dropdown-item" href="/records/export?format=json&{{.ExportQuery}}">JSON</a>
+                </div>
+            </div>
+            {{if eq $m.Key "all"}}<a class="btn btn-outline-secondary" href="/records/import">{{icon "import"}}导入数据</a>{{end}}
+            <a class="btn btn-primary" href="/records/create">{{icon "plus"}}填写台账</a>
+        </div>
+    </div>
+    {{if .Result.Items}}<div class="table-responsive">
+        <table class="table table-vcenter card-table wl-record-table">
+            <thead><tr><th>工作日期</th><th>分类 / 项目</th><th>工作内容</th><th>参与人员</th><th>难度</th><th>次数</th><th>记录人</th><th class="w-1"></th></tr></thead>
+            <tbody>
+            {{range .Result.Items}}<tr>
+                <td class="text-nowrap">{{dt (str .work_at)}}</td>
+                <td><div>{{.category_name}}</div>{{if .project_name}}<div class="small text-secondary">{{.project_name}}</div>{{end}}</td>
+                <td class="wl-table-content"><a href="/records/{{.id}}" class="text-reset">{{short (str .content) 80}}</a></td>
+                <td class="small">{{default "—" .participants_text}}</td>
+                <td>{{template "difficulty-badge" .difficulty}}</td>
+                <td>{{.work_count}}</td>
+                <td><div>{{.creator_name}}</div><div class="small text-secondary">{{dept .}}</div></td>
+                <td><a class="btn btn-sm btn-ghost-primary" href="/records/{{.id}}">{{icon "eye"}}</a></td>
+            </tr>{{end}}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer d-flex align-items-center">{{template "pager" .Pager}}</div>
+    {{else}}<div class="card-body">{{template "empty" "没有符合条件的工作记录。"}}</div>{{end}}
+</div>{{end}}
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script src="{{asset "libs/litepicker/litepicker.js"}}"></script>
+<script>WL.initTom(document); WL.initDatepicker(document);</script>{{end}}

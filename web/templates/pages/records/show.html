@@ -1,0 +1,42 @@
+{{define "content"}}{{$r := .Record}}<div class="row row-cards">
+<div class="col-lg-8">
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <h3 class="card-title">{{$r.category_name}}{{if $r.project_name}} · {{$r.project_name}}{{end}}</h3>
+                <div class="card-subtitle">{{dt (str $r.work_at)}}</div>
+            </div>
+            <div class="card-actions btn-list">
+                {{if .CanEdit}}<a class="btn btn-primary" href="/records/{{$r.id}}/edit">{{icon "edit"}}编辑</a>{{end}}
+                <button type="button" class="btn btn-outline-secondary" data-print>{{icon "print"}}打印</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="wl-pre fs-3 mb-4">{{$r.content}}</div>
+            <div class="datagrid">
+                <div class="datagrid-item"><div class="datagrid-title">难易度</div><div class="datagrid-content">{{template "difficulty-badge" $r.difficulty}}</div></div>
+                <div class="datagrid-item"><div class="datagrid-title">具体工作项目次数</div><div class="datagrid-content">{{$r.work_count}} 次</div></div>
+                <div class="datagrid-item"><div class="datagrid-title">所属部门（创建时）</div><div class="datagrid-content">{{dept $r}}</div></div>
+                <div class="datagrid-item"><div class="datagrid-title">参与人员</div><div class="datagrid-content">
+                    {{range $r.participants}}<span class="badge bg-primary-lt me-1 mb-1">{{.name}}</span>{{else}}—{{end}}</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="col-lg-4">
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">记录审计</h3></div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-5">记录创建者</dt><dd class="col-7">{{$r.creator_name}}</dd>
+                <dt class="col-5">创建时间</dt><dd class="col-7">{{dt (str $r.created_at)}}</dd>
+                <dt class="col-5">最后编辑用户</dt><dd class="col-7">{{$r.editor_name}}</dd>
+                <dt class="col-5">最后编辑时间</dt><dd class="col-7">{{dt (str $r.updated_at)}}</dd>
+                <dt class="col-5">记录 ID</dt><dd class="col-7">#{{$r.id}}</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="alert alert-info mt-3 small">台账记录不提供删除，以保证周报和年度统计有据可查。如内容有误，请编辑修正。</div>
+</div>
+</div>{{end}}
+{{define "scripts"}}<script>document.querySelectorAll('[data-print]').forEach(function (b) { b.addEventListener('click', function () { window.print(); }); });</script>{{end}}

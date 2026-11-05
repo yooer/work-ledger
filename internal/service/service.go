@@ -26,6 +26,7 @@ type Services struct {
 	Users      *Users
 	Depts      *Departments
 	Categories *Categories
+	Records    *Records
 }
 
 func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
@@ -37,6 +38,7 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Users = &Users{Core: core}
 	s.Depts = &Departments{Core: core}
 	s.Categories = &Categories{Core: core}
+	s.Records = &Records{Core: core, Settings: s.Settings}
 	return s
 }
 
