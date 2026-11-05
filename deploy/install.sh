@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # 工作台账 work-ledger 一键部署脚本（Linux + systemd）
 #
-#   curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash
-#   curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash -s -- --listen 0.0.0.0:8080 --admin-password '至少8位'
+#   curl -fsSL https://github.com/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash
+#   curl -fsSL https://github.com/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash -s -- --listen 0.0.0.0:8080 --admin-password '至少8位'
 #
 # 已安装时再次运行会自动转为升级（等同 wlctl upgrade）。
 set -euo pipefail
 
-BASE_URL="${WL_BASE_URL:-https://github.tool.do/yooer/work-ledger}"
+BASE_URL="${WL_BASE_URL:-https://github.com/yooer/work-ledger}"
+# 备用下载地址：官方地址连接失败时自动使用
+MIRROR_URL="${WL_MIRROR_URL:-}"
 VERSION="${WL_VERSION:-latest}"
 WL_HOME="${WL_HOME_DIR:-/home/work-ledger}"
 RUN_USER="${WL_USER:-work-ledger}"
@@ -25,7 +27,7 @@ usage() {
   --admin-password 密码   管理员初始密码（至少 8 位；不填则随机生成并打印）
   --home 目录             运行目录（默认 /home/work-ledger）
   --user 账号             运行账号（默认 work-ledger）
-  --base-url URL          下载源（默认 https://github.tool.do/yooer/work-ledger）
+  --base-url URL          下载源（默认 https://github.com/yooer/work-ledger）
   --demo                  同时创建演示数据
 USAGE
 }
@@ -61,18 +63,33 @@ esac
 ASSET="work-ledger-linux-${ARCH}"
 BIN="${WL_HOME}/bin/work-ledger"
 
-download() { # url 输出文件
+if [ -z "$MIRROR_URL" ]; then
+  case "$BASE_URL" in https://github.com/*) MIRROR_URL="https://github.tool.do/${BASE_URL#https://github.com/}" ;; esac
+fi
+
+fetch() { # url 输出文件
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 3 --connect-timeout 15 -o "$2" "$1"
+    curl -fL --retry 2 --connect-timeout 10 -o "$2" "$1"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$2" "$1"
+    wget -q -T 15 -t 2 -O "$2" "$1"
   else
     die "需要 curl 或 wget。"
   fi
 }
 
-release_url() { # 文件名
-  if [ "$VERSION" = "latest" ]; then echo "${BASE_URL}/releases/latest/download/$1"; else echo "${BASE_URL}/releases/download/${VERSION}/$1"; fi
+release_path() { # 文件名
+  if [ "$VERSION" = "latest" ]; then echo "/releases/latest/download/$1"; else echo "/releases/download/${VERSION}/$1"; fi
+}
+
+# download 先从官方地址下载，失败时自动改用备用地址。
+download() { # 文件名 输出文件
+  local path; path="$(release_path "$1")"
+  if fetch "${BASE_URL}${path}" "$2" 2>/dev/null; then return 0; fi
+  if [ -n "$MIRROR_URL" ] && [ "$MIRROR_URL" != "$BASE_URL" ]; then
+    warn "官方地址下载失败，改用备用地址 …"
+    fetch "${MIRROR_URL}${path}" "$2" && return 0
+  fi
+  die "下载 $1 失败，请检查服务器网络。"
 }
 
 # ---------- 已安装：转为升级 ----------
@@ -90,8 +107,8 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 info "下载 ${ASSET}（${VERSION}）…"
-download "$(release_url sha256sums.txt)" "$TMP/sha256sums.txt"
-download "$(release_url "$ASSET")" "$TMP/$ASSET"
+download sha256sums.txt "$TMP/sha256sums.txt"
+download "$ASSET" "$TMP/$ASSET"
 EXPECT="$(awk -v f="$ASSET" '$2==f || $2=="*"f {print $1}' "$TMP/sha256sums.txt")"
 [ -n "$EXPECT" ] || die "sha256sums.txt 中没有 ${ASSET}"
 ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{print $1}')"
@@ -138,7 +155,7 @@ AI_TIMEOUT=120
 TOTP_ISSUER="工作台账"
 REQUIRE_2FA=false
 
-# ===== 升级源（GitHub 经 github.tool.do 代理）=====
+# ===== 升级源 =====
 UPDATE_BASE_URL=${BASE_URL}
 ENV
 fi

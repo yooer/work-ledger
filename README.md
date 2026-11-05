@@ -30,18 +30,16 @@
 
 ## 1. 一键部署
 
-> 服务器无法直接访问 github.com 时，所有下载地址都把 `github.com` 替换为代理域名 **`github.tool.do`**，路径保持不变。下面的命令已使用代理地址。
-
 ### Linux（Ubuntu / Debian / CentOS / 麒麟等，需 systemd）
 
 ```bash
-curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash
+curl -fsSL https://github.com/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash
 ```
 
 带参数：
 
 ```bash
-curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash -s -- \
+curl -fsSL https://github.com/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash -s -- \
   --listen 127.0.0.1:8080 --admin-password '至少8位的强密码'
 ```
 
@@ -53,7 +51,7 @@ curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh |
 | `--admin-password` | 随机生成并打印 | 管理员初始密码（至少 8 位） |
 | `--home` | `/home/work-ledger` | 运行目录 |
 | `--user` | `work-ledger` | 运行账号（系统用户，不可登录） |
-| `--base-url` | `https://github.tool.do/yooer/work-ledger` | 下载源 |
+| `--base-url` | `https://github.com/yooer/work-ledger` | 下载源 |
 | `--demo` | 关闭 | 同时创建演示部门、人员和台账 |
 
 脚本会：识别 CPU 架构 → 下载程序与 `sha256sums.txt` 并校验 → 创建系统用户和目录 → 生成配置文件（随机生成 AI 接口令牌，权限 600）→ 初始化数据库并创建管理员 → 注册 `work-ledger.service`（开机自启）并启动 → 创建 `/usr/local/bin/wlctl`。
@@ -79,13 +77,13 @@ curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh |
 以**管理员身份**打开 PowerShell：
 
 ```powershell
-irm https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.ps1 | iex
+irm https://github.com/yooer/work-ledger/raw/main/deploy/install.ps1 | iex
 ```
 
 带参数：
 
 ```powershell
-& ([scriptblock]::Create((irm https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.ps1))) -Listen 127.0.0.1:8080 -AdminPassword '至少8位'
+& ([scriptblock]::Create((irm https://github.com/yooer/work-ledger/raw/main/deploy/install.ps1))) -Listen 127.0.0.1:8080 -AdminPassword '至少8位'
 ```
 
 安装到 `C:\ProgramData\work-ledger\`（子目录与 Linux 相同），注册为 Windows 服务 `WorkLedger`（自动启动、失败自动重启），并把 `bin` 目录加入系统 PATH，可直接使用 `wlctl`。
@@ -125,7 +123,7 @@ sudo systemctl start work-ledger
 
 **升级流程**（`wlctl upgrade`）：下载新程序 → 校验 sha256 → 试运行新程序 → 用 `VACUUM INTO` 备份数据库到 `backups/pre-upgrade-*.sqlite` → 停止服务 → 旧程序改名为 `work-ledger.prev` → 替换新程序 → 启动 → 30 秒内检查 `/api/v1/health`。**健康检查失败会自动换回旧程序并恢复升级前的数据库**。
 
-升级源由配置项 `UPDATE_BASE_URL` 决定，默认 `https://github.tool.do/yooer/work-ledger`。
+升级源由配置项 `UPDATE_BASE_URL` 决定，默认 `https://github.com/yooer/work-ledger`。
 
 ---
 
@@ -353,7 +351,7 @@ go vet ./... && go test ./...
 
 **升级失败怎么办**：`wlctl upgrade` 会自动回滚程序和数据库；也可以手动 `sudo wlctl rollback --with-db`。
 
-**`wlctl check` 报 404**：确认服务器能访问 `https://github.tool.do`，或修改 `UPDATE_BASE_URL`；也可以使用离线升级。
+**`wlctl check` 失败**：确认服务器能访问 GitHub，或修改 `UPDATE_BASE_URL`；无法联网时可以使用离线升级。
 
 **普通员工看不到同事的台账**：这是权限设计。部门经理可以看本部门；管理员可以看全部。
 

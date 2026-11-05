@@ -2,10 +2,10 @@
   工作台账 work-ledger 一键部署脚本（Windows，需“以管理员身份运行” PowerShell）
 
   默认安装：
-    irm https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.ps1 | iex
+    irm https://github.com/yooer/work-ledger/raw/main/deploy/install.ps1 | iex
 
   带参数安装：
-    & ([scriptblock]::Create((irm https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.ps1))) -Listen 0.0.0.0:8080 -AdminPassword '至少8位'
+    & ([scriptblock]::Create((irm https://github.com/yooer/work-ledger/raw/main/deploy/install.ps1))) -Listen 0.0.0.0:8080 -AdminPassword '至少8位'
 
   已安装时再次运行会自动转为升级（等同 wlctl upgrade）。
 #>
@@ -15,7 +15,8 @@ param(
     [string]$AdminUser = 'admin',
     [string]$AdminPassword = $env:ADMIN_PASSWORD,
     [string]$HomeDir = 'C:\ProgramData\work-ledger',
-    [string]$BaseUrl = $(if ($env:WL_BASE_URL) { $env:WL_BASE_URL } else { 'https://github.tool.do/yooer/work-ledger' }),
+    [string]$BaseUrl = $(if ($env:WL_BASE_URL) { $env:WL_BASE_URL } else { 'https://github.com/yooer/work-ledger' }),
+    [string]$MirrorUrl = $env:WL_MIRROR_URL,
     [switch]$Demo
 )
 
@@ -32,8 +33,24 @@ if (-not [Environment]::Is64BitOperatingSystem) { Die '仅支持 64 位 Windows�
 
 $Asset = 'work-ledger-windows-amd64.exe'
 $Bin = Join-Path $HomeDir 'bin\work-ledger.exe'
-function ReleaseUrl($file) {
-    if ($Version -eq 'latest') { "$BaseUrl/releases/latest/download/$file" } else { "$BaseUrl/releases/download/$Version/$file" }
+if (-not $MirrorUrl -and $BaseUrl -like 'https://github.com/*') {
+    $MirrorUrl = 'https://github.tool.do/' + $BaseUrl.Substring('https://github.com/'.Length)
+}
+function ReleasePath($file) {
+    if ($Version -eq 'latest') { "/releases/latest/download/$file" } else { "/releases/download/$Version/$file" }
+}
+# 先从官方地址下载，失败时自动改用备用地址
+function Download($file, $out) {
+    $path = ReleasePath $file
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri ($BaseUrl + $path) -OutFile $out -TimeoutSec 60
+        return
+    } catch {
+        if (-not $MirrorUrl -or $MirrorUrl -eq $BaseUrl) { Die "下载 $file 失败：$($_.Exception.Message)" }
+        Write-Host '[提示] 官方地址下载失败，改用备用地址 …' -ForegroundColor Yellow
+    }
+    try { Invoke-WebRequest -UseBasicParsing -Uri ($MirrorUrl + $path) -OutFile $out -TimeoutSec 300 }
+    catch { Die "下载 $file 失败：$($_.Exception.Message)" }
 }
 
 $env:WL_HOME = $HomeDir
@@ -48,8 +65,8 @@ $tmp = Join-Path $env:TEMP ("wl-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     Info "下载 $Asset（$Version）…"
-    Invoke-WebRequest -UseBasicParsing -Uri (ReleaseUrl 'sha256sums.txt') -OutFile "$tmp\sha256sums.txt"
-    Invoke-WebRequest -UseBasicParsing -Uri (ReleaseUrl $Asset) -OutFile "$tmp\$Asset"
+    Download 'sha256sums.txt' "$tmp\sha256sums.txt"
+    Download $Asset "$tmp\$Asset"
     $line = Get-Content "$tmp\sha256sums.txt" | Where-Object { ($_ -split '\s+')[1] -replace '^\*', '' -eq $Asset } | Select-Object -First 1
     if (-not $line) { Die "sha256sums.txt 中没有 $Asset" }
     $expect = ($line -split '\s+')[0].ToLower()
@@ -88,7 +105,7 @@ AI_TIMEOUT=120
 TOTP_ISSUER="工作台账"
 REQUIRE_2FA=false
 
-# ===== 升级源（GitHub 经 github.tool.do 代理）=====
+# ===== 升级源 =====
 UPDATE_BASE_URL=$BaseUrl
 "@
         [IO.File]::WriteAllText($envFile, $content, (New-Object Text.UTF8Encoding($false)))

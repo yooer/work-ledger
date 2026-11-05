@@ -20,6 +20,7 @@ type App struct {
 	SessionHours  int
 	ListenAddr    string
 	UpdateBaseURL string
+	UpdateMirror  string // 备用下载地址（官方地址连不上时使用），为空时按内置规则推导
 }
 
 type DB struct {
@@ -186,7 +187,8 @@ func Load(home string) (*Config, error) {
 			SessionName:   str("SESSION_NAME", "work_ledger_session"),
 			SessionHours:  max(1, integer("SESSION_LIFETIME_HOURS", 12)),
 			ListenAddr:    str("LISTEN_ADDR", "127.0.0.1:8080"),
-			UpdateBaseURL: strings.TrimRight(str("UPDATE_BASE_URL", "https://github.tool.do/yooer/work-ledger"), "/"),
+			UpdateBaseURL: strings.TrimRight(str("UPDATE_BASE_URL", "https://github.com/yooer/work-ledger"), "/"),
+			UpdateMirror:  strings.TrimRight(str("UPDATE_MIRROR_URL", ""), "/"),
 		},
 		AI: AI{
 			APIToken: str("AI_API_TOKEN", ""),

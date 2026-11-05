@@ -56,12 +56,12 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --notes "工作台账 ${GITHUB_REF_NAME}
 
-          一键部署（服务器无法访问 github.com 时已使用 github.tool.do 代理）：
+          一键部署：
 
           Linux：
-          \`curl -fsSL https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash\`
+          \`curl -fsSL https://github.com/yooer/work-ledger/raw/main/deploy/install.sh | sudo bash\`
 
           Windows（管理员 PowerShell）：
-          \`irm https://github.tool.do/yooer/work-ledger/raw/main/deploy/install.ps1 | iex\`
+          \`irm https://github.com/yooer/work-ledger/raw/main/deploy/install.ps1 | iex\`
 
           已部署的服务器升级：\`sudo wlctl upgrade\`"

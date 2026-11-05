@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -55,7 +56,7 @@ const Usage = `wlctl —— 工作台账服务管理工具
   start | stop | restart 启动 / 停止 / 重启服务
   logs [-n 200] [-f]     查看日志（Linux 读取 journald，其他读取 logs/app.log）
   version                显示当前版本
-  check                  检查 GitHub（经 github.tool.do 代理）上的最新版本
+  check                  检查 GitHub 上的最新版本
   upgrade [版本]         升级到最新版或指定版本（如 v1.2.0）：下载 → 校验 sha256 →
                          备份数据库 → 替换程序 → 重启 → 健康检查，失败自动回滚
       --file 路径        使用本地离线程序文件升级（需同时提供 --sha256 或跳过校验 --no-verify）
@@ -63,7 +64,7 @@ const Usage = `wlctl —— 工作台账服务管理工具
   backup                 立即生成一份数据库文件备份到 backups/
   uninstall [--purge]    停止并移除系统服务；默认保留数据，--purge 同时删除整个运行目录
 
-升级源：配置项 UPDATE_BASE_URL（默认 https://github.tool.do/yooer/work-ledger）。
+升级源：配置项 UPDATE_BASE_URL（默认 https://github.com/yooer/work-ledger）。
 `
 
 // Run 分发命令。
@@ -307,28 +308,76 @@ type ReleaseInfo struct {
 	Notes       string            `json:"notes"`
 }
 
-var httpClient = &http.Client{Timeout: 10 * time.Minute}
-
-func (c *Ctl) releaseURL(tag, file string) string {
-	base := c.Cfg.App.UpdateBaseURL
-	if tag == "" || tag == "latest" {
-		return base + "/releases/latest/download/" + file
-	}
-	return base + "/releases/download/" + tag + "/" + file
+// httpClient 连接/握手超时较短，便于官方地址不可达时尽快切换到备用地址。
+var httpClient = &http.Client{
+	Timeout: 10 * time.Minute,
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+	},
 }
 
-func (c *Ctl) fetch(url string, limit int64) ([]byte, error) {
+// releasePath 相对仓库地址的下载路径。
+func releasePath(tag, file string) string {
+	if tag == "" || tag == "latest" {
+		return "/releases/latest/download/" + file
+	}
+	return "/releases/download/" + tag + "/" + file
+}
+
+// mirrorBase 备用地址：配置 UPDATE_MIRROR_URL 优先；否则官方地址为 github.com 时使用内置备用域名。
+func (c *Ctl) mirrorBase() string {
+	if c.Cfg.App.UpdateMirror != "" {
+		return c.Cfg.App.UpdateMirror
+	}
+	base := c.Cfg.App.UpdateBaseURL
+	if strings.HasPrefix(base, "https://github.com/") {
+		return "https://github.tool.do/" + strings.TrimPrefix(base, "https://github.com/")
+	}
+	return ""
+}
+
+// fetch 先请求官方地址；连接失败或服务端错误时再使用备用地址。404 等明确结果不切换。
+func (c *Ctl) fetch(path string, limit int64) ([]byte, error) {
+	bases := []string{c.Cfg.App.UpdateBaseURL}
+	if m := c.mirrorBase(); m != "" && m != bases[0] {
+		bases = append(bases, m)
+	}
+	var lastErr error
+	for i, base := range bases {
+		if i > 0 {
+			c.printf("官方地址无法访问（%v），改用备用地址下载 …\n", lastErr)
+		}
+		body, status, err := c.get(base+path, limit)
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+		if status == http.StatusNotFound {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+func (c *Ctl) get(url string, limit int64) ([]byte, int, error) {
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", "work-ledger-ctl/"+c.Version)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("下载失败（%s）：%v", url, err)
+		return nil, 0, fmt.Errorf("下载失败（%s）：%v", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("下载失败（%s）：HTTP %d", url, resp.StatusCode)
+		return nil, resp.StatusCode, fmt.Errorf("下载失败（%s）：HTTP %d", url, resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, limit))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit))
+	if err != nil {
+		return nil, 0, fmt.Errorf("下载中断（%s）：%v", url, err)
+	}
+	return b, 200, nil
 }
 
 // Check 检查最新版本。
@@ -347,7 +396,7 @@ func (c *Ctl) Check() (*ReleaseInfo, error) {
 }
 
 func (c *Ctl) release(tag string) (*ReleaseInfo, error) {
-	body, err := c.fetch(c.releaseURL(tag, "version.json"), 1<<20)
+	body, err := c.fetch(releasePath(tag, "version.json"), 1<<20)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +492,7 @@ func (c *Ctl) Upgrade(tag, localFile, localSum string, noVerify, yes bool) error
 		}
 		asset := AssetName()
 		c.printf("下载 %s %s …\n", info.Version, asset)
-		sums, err := c.fetch(c.releaseURL(info.Version, "sha256sums.txt"), 1<<20)
+		sums, err := c.fetch(releasePath(info.Version, "sha256sums.txt"), 1<<20)
 		if err != nil {
 			return err
 		}
@@ -451,7 +500,7 @@ func (c *Ctl) Upgrade(tag, localFile, localSum string, noVerify, yes bool) error
 		if want == "" {
 			return fmt.Errorf("sha256sums.txt 中没有 %s", asset)
 		}
-		if bin, err = c.fetch(c.releaseURL(info.Version, asset), 300<<20); err != nil {
+		if bin, err = c.fetch(releasePath(info.Version, asset), 300<<20); err != nil {
 			return err
 		}
 		if got := sha256Hex(bin); got != want {
