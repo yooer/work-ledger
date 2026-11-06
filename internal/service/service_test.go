@@ -902,3 +902,20 @@ func TestMultiLevelDepartments(t *testing.T) {
 	}
 	_ = admin
 }
+
+func TestImportEmptyDifficultyDefaultsToOne(t *testing.T) {
+	s, _ := newTestServices(t)
+	admin := userByName(t, s, "admin")
+	csv := "工作分类,工作内容,日期,参与人员,难易度,次数\n内部管理,难易度留空,2026-03-02 09:30,张三,,\n"
+	rows, _, err := s.Import.Parse([]byte(csv), "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, err := s.Import.Import(rows, ImportOptions{DefaultCreatorID: admin.Int("id")}); err != nil || res.Imported != 1 {
+		t.Fatalf("import: %+v %v", res, err)
+	}
+	r, _ := db.One(s.Core.DB, "SELECT difficulty, work_count FROM work_records WHERE content = '难易度留空'")
+	if r.Int("difficulty") != 1 || r.Int("work_count") != 1 {
+		t.Fatalf("defaults = %v", r)
+	}
+}

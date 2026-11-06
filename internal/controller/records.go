@@ -157,7 +157,7 @@ func (c *Controllers) recordForm(ctx *web.Ctx) error {
 	id := ctx.ID()
 	old := map[string]any{
 		"id": int64(0), "work_category_id": int64(0), "project_category_id": int64(0), "content": "",
-		"work_at": timeutil.Now().Format(timeutil.Local), "difficulty": int64(3), "work_count": int64(1),
+		"work_at": timeutil.Now().Format(timeutil.Local), "difficulty": int64(1), "work_count": int64(1),
 	}
 	selected := []int64{ctx.UserID()}
 	var rec model.Row

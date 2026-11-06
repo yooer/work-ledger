@@ -567,7 +567,7 @@ func (s *Importer) importRow(tx db.Q, row ImportRow, opt ImportOptions, defCreat
 		}
 		return false, rowFail("日期格式无法识别：%s", workAtRaw)
 	}
-	difficulty, err := parseIntField(f["difficulty"], 3, 1, 5, "难易度")
+	difficulty, err := parseIntField(f["difficulty"], 1, 1, 5, "难易度") // 空值默认 1（很简单）
 	if err != nil {
 		return false, err
 	}

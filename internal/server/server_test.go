@@ -305,3 +305,15 @@ func TestPositionAjax(t *testing.T) {
 		t.Fatalf("missing position: %d %s", code, body)
 	}
 }
+
+func TestNewRecordDefaultDifficulty(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	_, page := c.get("/records/create")
+	if !regexp.MustCompile(`name="difficulty" value="1" class="form-selectgroup-input" checked`).MatchString(page) {
+		t.Fatal("new record should default to difficulty 1")
+	}
+	if regexp.MustCompile(`name="difficulty" value="3" class="form-selectgroup-input" checked`).MatchString(page) {
+		t.Fatal("difficulty 3 should not be preselected")
+	}
+}
