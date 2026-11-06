@@ -27,6 +27,8 @@ func (c *Controllers) registerOrg(app *web.App) {
 		"reset_totp":     {Validate: validator.ID, Handle: c.resetTotp},
 	})
 
+	app.Page("/org-chart", web.Admin, c.orgChartPage)
+
 	app.Page("/categories", web.Admin, c.categoriesPage)
 	app.Ajax("/categories/ajax", web.Admin, web.Actions{
 		"save_work":    {Validate: validator.WorkCategory, Handle: c.saveWorkCategory},
@@ -113,7 +115,7 @@ func (c *Controllers) peoplePage(ctx *web.Ctx) error {
 
 func (c *Controllers) personForm(ctx *web.Ctx) error {
 	id := ctx.ID()
-	old := map[string]any{"id": int64(0), "username": "", "name": "", "employee_no": "", "role": "employee", "department_id": int64(0), "phone": "", "email": "", "is_active": int64(1)}
+	old := map[string]any{"id": int64(0), "username": "", "name": "", "employee_no": "", "role": "employee", "department_id": int64(0), "supervisor_id": int64(0), "phone": "", "email": "", "is_active": int64(1)}
 	if id > 0 {
 		p, err := c.S.Users.Find(id)
 		if err != nil {
@@ -125,18 +127,28 @@ func (c *Controllers) personForm(ctx *web.Ctx) error {
 	if err != nil {
 		return err
 	}
+	supervisors, err := c.S.Users.SupervisorOptions(id, toInt(old["supervisor_id"]))
+	if err != nil {
+		return err
+	}
+	var reports []service.Row
+	if id > 0 {
+		if reports, err = c.S.Users.DirectReports(id); err != nil {
+			return err
+		}
+	}
 	title := "新增员工"
 	if id > 0 {
 		title = "编辑员工"
 	}
 	return ctx.Render("people/form", map[string]any{
 		"PageTitle": title, "Active": "people", "Old": old, "IsEdit": id > 0, "Departments": depts,
-		"IsSelf": id == ctx.UserID(),
+		"IsSelf": id == ctx.UserID(), "Supervisors": supervisors, "DirectReports": reports,
 	})
 }
 
 func toUserInput(p validator.UserInput) service.UserInput {
-	return service.UserInput{Username: p.Username, Name: p.Name, EmployeeNo: p.EmployeeNo, Role: p.Role, DepartmentID: p.DepartmentID,
+	return service.UserInput{Username: p.Username, Name: p.Name, EmployeeNo: p.EmployeeNo, Role: p.Role, DepartmentID: p.DepartmentID, SupervisorID: p.SupervisorID,
 		Phone: p.Phone, Email: p.Email, IsActive: p.IsActive, Password: p.Password}
 }
 
@@ -173,6 +185,16 @@ func (c *Controllers) resetTotp(ctx *web.Ctx, in any) (any, error) {
 	return web.Result{Message: "已重置 " + u.Str("name") + " 的 TOTP 二次验证。该员工下次可重新绑定。", Redirect: "/people/" + strconv.FormatInt(p.ID, 10) + "/edit", FlashOnRedirect: true}, nil
 }
 
+// ---------------- 组织架构（主管领导关系） ----------------
+
+func (c *Controllers) orgChartPage(ctx *web.Ctx) error {
+	trees, unassigned, err := c.S.Users.OrgChart()
+	if err != nil {
+		return err
+	}
+	return ctx.Render("people/org", map[string]any{"PageTitle": "组织架构", "Active": "org-chart", "Trees": trees, "Unassigned": unassigned})
+}
+
 // ---------------- 分类 ----------------
 
 func (c *Controllers) categoriesPage(ctx *web.Ctx) error {
@@ -180,18 +202,14 @@ func (c *Controllers) categoriesPage(ctx *web.Ctx) error {
 	if err != nil {
 		return err
 	}
-	var customer []service.Row
 	names := map[int64]string{}
 	for _, cat := range cats {
 		names[cat.Int("id")] = cat.Str("name")
-		if cat.Bool("is_customer_project") {
-			customer = append(customer, cat)
-		}
 	}
 	for _, p := range projects {
 		p["category_name"] = names[p.Int("work_category_id")]
 	}
-	return ctx.Render("categories/index", map[string]any{"PageTitle": "分类管理", "Active": "categories", "Categories": cats, "Projects": projects, "CustomerCategories": customer})
+	return ctx.Render("categories/index", map[string]any{"PageTitle": "分类管理", "Active": "categories", "Categories": cats, "Projects": projects})
 }
 
 func (c *Controllers) saveWorkCategory(ctx *web.Ctx, in any) (any, error) {
@@ -213,9 +231,9 @@ func (c *Controllers) saveProjectCategory(ctx *web.Ctx, in any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	msg := "集客项目子分类已更新，历史台账数据保持不变。"
+	msg := "子分类已更新，历史台账数据保持不变。"
 	if created {
-		msg = "集客项目子分类已新增。"
+		msg = "子分类已新增。"
 	}
 	return web.Result{Message: msg, Redirect: "/categories", FlashOnRedirect: true}, nil
 }

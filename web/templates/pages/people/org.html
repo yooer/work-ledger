@@ -1,0 +1,26 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/org.css"}}">{{end}}
+{{define "content"}}<div class="alert alert-info">
+    组织架构按人员资料中的“主管领导”生成。主管领导可以查看、导出其直接和间接下属的台账，并生成团队总结。如需调整，请到<a href="/people">人员管理</a>编辑员工的“主管领导”。
+</div>
+<div class="card mb-4">
+    <div class="card-header"><h3 class="card-title">{{icon "org"}} 汇报关系</h3></div>
+    <div class="card-body">
+        {{if .Trees}}<ul class="wl-org-tree">{{range .Trees}}{{template "org-node" .}}{{end}}</ul>
+        {{else}}{{template "empty" "还没有设置任何主管领导关系。"}}{{end}}
+    </div>
+</div>
+{{if .Unassigned}}<div class="card">
+    <div class="card-header"><h3 class="card-title">{{icon "user"}} 未设置汇报关系的人员（{{len .Unassigned}}）</h3></div>
+    <div class="card-body wl-org-unassigned">
+        {{range .Unassigned}}<a class="wl-org-chip{{if not .Active}} wl-org-inactive{{end}}" href="/people/{{.ID}}/edit">{{.Name}}<small>{{.Department}}</small></a>{{end}}
+    </div>
+</div>{{end}}{{end}}
+
+{{define "org-node"}}<li>
+    <a class="wl-org-card{{if not .Active}} wl-org-inactive{{end}}" href="/people/{{.ID}}/edit">
+        <span class="wl-org-name">{{.Name}}{{if .EmployeeNo}} <small>{{.EmployeeNo}}</small>{{end}}</span>
+        <span class="wl-org-meta">{{role .Role}} · {{.Department}}{{if not .Active}} · 已停用{{end}}</span>
+        {{if .TeamSize}}<span class="badge bg-primary-lt">下属 {{.TeamSize}} 人</span>{{end}}
+    </a>
+    {{if .Children}}<ul>{{range .Children}}{{template "org-node" .}}{{end}}</ul>{{end}}
+</li>{{end}}

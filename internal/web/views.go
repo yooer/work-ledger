@@ -74,6 +74,7 @@ func (c *Ctx) renderWith(status int, page, layout string, data map[string]any) e
 	data["User"] = c.User
 	data["IsAdmin"] = c.IsAdmin()
 	data["IsManager"] = c.IsManager()
+	data["IsLeader"] = c.IsLeader()
 	data["CSRF"] = c.CSRFToken()
 	data["Flashes"] = c.pullFlashes()
 	data["TodayLabel"] = timeutil.TodayLabel()
@@ -245,6 +246,7 @@ var iconMap = map[string]string{
 	"warning": "alert-triangle", "chevron": "chevron-right", "backup": "database-export", "import": "file-import",
 	"export": "file-export", "shield": "shield-lock", "key": "key", "download": "download", "upload": "upload",
 	"refresh": "refresh", "trash": "trash", "info": "info-circle", "user": "user", "robot": "robot",
+	"org": "sitemap", "team": "users-group", "eraser": "eraser",
 }
 
 // Icon 输出 Tabler 图标。

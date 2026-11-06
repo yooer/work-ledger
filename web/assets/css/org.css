@@ -1,0 +1,86 @@
+/* 组织架构页：主管领导汇报关系树 */
+.wl-org-tree,
+.wl-org-tree ul {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+}
+
+.wl-org-tree ul {
+    margin-left: 1.25rem;
+    padding-left: 1.25rem;
+    border-left: 1px dashed var(--tblr-border-color);
+}
+
+.wl-org-tree li {
+    position: relative;
+    padding: .35rem 0;
+}
+
+.wl-org-tree ul > li::before {
+    content: "";
+    position: absolute;
+    left: -1.25rem;
+    top: 1.4rem;
+    width: 1rem;
+    border-top: 1px dashed var(--tblr-border-color);
+}
+
+.wl-org-card {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem .75rem;
+    padding: .5rem .75rem;
+    border: 1px solid var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    background: var(--tblr-bg-surface);
+    color: inherit;
+    text-decoration: none;
+    max-width: 100%;
+}
+
+.wl-org-card:hover {
+    border-color: var(--tblr-primary);
+    text-decoration: none;
+}
+
+.wl-org-name {
+    font-weight: 600;
+}
+
+.wl-org-name small,
+.wl-org-meta {
+    color: var(--tblr-secondary);
+    font-weight: 400;
+    font-size: .8125rem;
+}
+
+.wl-org-inactive {
+    opacity: .55;
+}
+
+.wl-org-unassigned {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.wl-org-chip {
+    display: inline-flex;
+    flex-direction: column;
+    padding: .35rem .65rem;
+    border: 1px solid var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    color: inherit;
+    text-decoration: none;
+}
+
+.wl-org-chip small {
+    color: var(--tblr-secondary);
+}
+
+.wl-org-chip:hover {
+    border-color: var(--tblr-primary);
+    text-decoration: none;
+}

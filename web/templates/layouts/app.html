@@ -29,7 +29,7 @@
                     <li class="nav-item wl-nav-section">日常工作</li>
                     {{template "nav-item" (dict "Active" .Active "Key" "dashboard" "Href" "/" "Icon" "dashboard" "Label" "工作台")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "my-records" "Href" "/my-records" "Icon" "ledger" "Label" "我的台账")}}
-                    {{if .IsManager}}{{template "nav-item" (dict "Active" .Active "Key" "dept-records" "Href" "/department-records" "Icon" "building" "Label" "部门台账")}}{{end}}
+                    {{if .IsLeader}}{{template "nav-item" (dict "Active" .Active "Key" "team-records" "Href" "/team-records" "Icon" "team" "Label" "团队台账")}}{{end}}
                     {{template "nav-item" (dict "Active" .Active "Key" "reports" "Href" "/reports/weekly" "Icon" "report" "Label" "周报中心")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "annual" "Href" "/reports/yearly" "Icon" "calendar" "Label" "年度总结")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "period" "Href" "/reports/period" "Icon" "clock" "Label" "时段总结")}}
@@ -38,6 +38,7 @@
                     {{template "nav-item" (dict "Active" .Active "Key" "records" "Href" "/records" "Icon" "ledger" "Label" "全部台账")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "records-import" "Href" "/records/import" "Icon" "import" "Label" "数据导入")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "people" "Href" "/people" "Icon" "people" "Label" "人员管理")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "org-chart" "Href" "/org-chart" "Icon" "org" "Label" "组织架构")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "departments" "Href" "/departments" "Icon" "building" "Label" "部门管理")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "categories" "Href" "/categories" "Icon" "tag" "Label" "分类管理")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "backup" "Href" "/backup" "Icon" "backup" "Label" "数据备份")}}

@@ -109,7 +109,7 @@ func Install(c *Core, opt InstallOptions) (*InstallResult, error) {
 			}
 		}
 	}
-	res.Notes = append(res.Notes, "工作分类与集客项目子分类已就绪（只增改、不删除）。")
+	res.Notes = append(res.Notes, "工作分类与子分类已就绪（只增改、不删除）。")
 
 	if opt.Demo {
 		demoPwd, err := installDemo(c, opt.AdminUser, catMap)

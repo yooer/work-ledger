@@ -38,7 +38,7 @@ const (
 	Public       Guard = iota // 无需登录（登录页等）
 	Login                     // 需登录
 	Admin                     // 仅系统管理员
-	AdminManager              // 管理员或部门经理
+	AdminManager              // 管理员、部门经理或有下属的主管领导
 )
 
 // Page 注册 GET 页面。

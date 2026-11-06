@@ -21,7 +21,7 @@ func (c *Controllers) registerTransfer(app *web.App) {
 	})
 }
 
-// exportRecords 导出当前筛选结果（文件下载例外：GET）。mode 决定范围：mine / dept / all。
+// exportRecords 导出当前筛选结果（文件下载例外：GET）。mode 决定范围：mine / team / all。
 func (c *Controllers) exportRecords(ctx *web.Ctx) error {
 	q := ctx.Query()
 	v := validator.New(q)
@@ -29,18 +29,21 @@ func (c *Controllers) exportRecords(ctx *web.Ctx) error {
 	if err := v.Err(); err != nil {
 		return apperr.New("不支持的导出格式。")
 	}
-	mode := v.OneOf("mode", "导出范围", "mine", "mine", "dept", "all")
+	mode := v.OneOf("mode", "导出范围", "mine", "mine", "team", "dept", "all")
+	if mode == "dept" { // 旧版链接
+		mode = "team"
+	}
 	switch {
 	case mode == "all" && !ctx.IsAdmin():
 		mode = "mine"
-	case mode == "dept" && !ctx.IsAdmin() && !ctx.IsManager():
+	case mode == "team" && !ctx.IsAdmin() && !ctx.IsLeader():
 		mode = "mine"
 	}
 	sc, f, in, err := c.recordQuery(ctx, mode)
 	if err != nil {
 		return err
 	}
-	scopeName := map[string]string{"all": "admin", "dept": "department", "mine": "self"}[mode]
+	scopeName := map[string]string{"all": "admin", "team": "team", "mine": "self"}[mode]
 	file, err := c.S.Export.Export(sc, f, format, map[string]any{"scope": scopeName, "filters": in})
 	if err != nil {
 		return err

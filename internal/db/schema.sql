@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at TEXT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    supervisor_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT
 );
 
@@ -120,6 +121,7 @@ CREATE TABLE IF NOT EXISTS weekly_reports (
     model TEXT NULL,
     created_by INTEGER NULL,
     created_at TEXT NOT NULL,
+    team_leader_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
     FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
@@ -140,6 +142,7 @@ CREATE TABLE IF NOT EXISTS annual_reports (
     model TEXT NULL,
     created_by INTEGER NULL,
     created_at TEXT NOT NULL,
+    team_leader_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
     FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
@@ -168,6 +171,7 @@ CREATE TABLE IF NOT EXISTS period_reports (
     model TEXT NULL,
     created_by INTEGER NULL,
     created_at TEXT NOT NULL,
+    team_leader_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
     FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL

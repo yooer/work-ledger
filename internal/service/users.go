@@ -48,8 +48,9 @@ func (s *Users) List(f UserFilter, page, perPage int) ([]Row, int, int, error) {
 		return nil, 0, 0, err
 	}
 	page, offset := clampPage(page, int(total), perPage)
-	rows, err := db.All(s.DB, `SELECT u.*, d.name AS department_name, pd.name AS parent_department_name
+	rows, err := db.All(s.DB, `SELECT u.*, d.name AS department_name, pd.name AS parent_department_name, su.name AS supervisor_name
 		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
+		LEFT JOIN users su ON su.id = u.supervisor_id
 		WHERE `+where+` ORDER BY u.is_active DESC, COALESCE(pd.name, d.name, u.name), d.name, u.name
 		LIMIT ? OFFSET ?`, append(args, perPage, offset)...)
 	return rows, int(total), page, err
@@ -93,6 +94,7 @@ type UserInput struct {
 	EmployeeNo   string
 	Role         string
 	DepartmentID int64
+	SupervisorID int64 // 主管领导，0 表示无
 	Phone        string
 	Email        string
 	IsActive     bool
@@ -124,10 +126,77 @@ func (s *Users) check(id int64, in UserInput, current Row) error {
 			fields["department_id"] = "所选部门已停用。"
 		}
 	}
+	if msg, err := s.checkSupervisor(id, in.SupervisorID, current); err != nil {
+		return err
+	} else if msg != "" {
+		fields["supervisor_id"] = msg
+	}
 	if len(fields) > 0 {
 		return apperr.Validation(fields)
 	}
 	return nil
+}
+
+// checkSupervisor 校验主管领导：必须存在；新指定的不能是已停用人员；不能形成循环汇报（不能选本人或自己的下属）。
+func (s *Users) checkSupervisor(id, supervisorID int64, current Row) (string, error) {
+	if supervisorID <= 0 {
+		return "", nil
+	}
+	if id > 0 && supervisorID == id {
+		return "主管领导不能是本人。", nil
+	}
+	sup, err := db.One(s.DB, "SELECT id, name, is_active FROM users WHERE id = ?", supervisorID)
+	if err != nil {
+		return "", err
+	}
+	if sup == nil {
+		return "所选主管领导不存在。", nil
+	}
+	if !sup.Bool("is_active") && supervisorID != current.Int("supervisor_id") {
+		return "所选主管领导已停用。", nil
+	}
+	if id > 0 {
+		subs, err := subordinateIDs(s.DB, id)
+		if err != nil {
+			return "", err
+		}
+		if containsID(subs, supervisorID) {
+			return "“" + sup.Str("name") + "”是该员工的下属，不能设为其主管领导（会形成循环汇报）。", nil
+		}
+	}
+	return "", nil
+}
+
+// SupervisorOptions 主管领导下拉：启用人员（排除本人及其下属），加上当前已选的停用人员。
+func (s *Users) SupervisorOptions(id, current int64) ([]Row, error) {
+	var exclude []int64
+	if id > 0 {
+		subs, err := subordinateIDs(s.DB, id)
+		if err != nil {
+			return nil, err
+		}
+		exclude = append(subs, id)
+	}
+	rows, err := db.All(s.DB, `SELECT u.id, u.name, u.employee_no, u.role, u.is_active, d.name AS department_name, pd.name AS parent_department_name
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
+		WHERE u.is_active = 1 OR u.id = ? ORDER BY u.is_active DESC, COALESCE(pd.name, d.name, u.name), d.name, u.name`, current)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Row, 0, len(rows))
+	for _, r := range rows {
+		if !containsID(exclude, r.Int("id")) {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// DirectReports 直接下属列表。
+func (s *Users) DirectReports(id int64) ([]Row, error) {
+	return db.All(s.DB, `SELECT u.id, u.name, u.employee_no, u.is_active, d.name AS department_name
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id
+		WHERE u.supervisor_id = ? AND u.id <> ? ORDER BY u.is_active DESC, u.name`, id, id)
 }
 
 func (s *Users) Create(in UserInput) (int64, error) {
@@ -139,9 +208,9 @@ func (s *Users) Create(in UserInput) (int64, error) {
 		return 0, err
 	}
 	ts := now()
-	return db.Insert(s.DB, `INSERT INTO users (username, password_hash, name, employee_no, role, department_id, phone, email, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		in.Username, h, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.DepartmentID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), ts, ts)
+	return db.Insert(s.DB, `INSERT INTO users (username, password_hash, name, employee_no, role, department_id, supervisor_id, phone, email, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.Username, h, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.DepartmentID), nullInt(in.SupervisorID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), ts, ts)
 }
 
 // Update 编辑人员，包含“不能停用自己/改自己角色、至少保留一名管理员”规则。
@@ -176,9 +245,9 @@ func (s *Users) Update(actorID, id int64, in UserInput) error {
 		return apperr.Validation(fields)
 	}
 	return s.DB.Tx(func(tx db.Q) error {
-		if _, err := db.Exec(tx, `UPDATE users SET username = ?, name = ?, employee_no = ?, role = ?, department_id = ?,
+		if _, err := db.Exec(tx, `UPDATE users SET username = ?, name = ?, employee_no = ?, role = ?, department_id = ?, supervisor_id = ?,
 			phone = ?, email = ?, is_active = ?, updated_at = ? WHERE id = ?`,
-			in.Username, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.DepartmentID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), now(), id); err != nil {
+			in.Username, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.DepartmentID), nullInt(in.SupervisorID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), now(), id); err != nil {
 			return err
 		}
 		if !in.IsActive {
@@ -237,26 +306,117 @@ func (s *Users) ParticipantOptions(selected []int64) ([]Row, error) {
 		WHERE `+cond+` ORDER BY COALESCE(pd.name, d.name, u.name), d.name, u.name`, args...)
 }
 
-// EmployeeOptions 筛选用的员工列表（scope 限定可见范围）。
+// EmployeeOptions 筛选用的员工列表（scope 限定可见范围：本人 + 下属 + 分管部门人员）。
 func (s *Users) EmployeeOptions(sc Scope) ([]Row, error) {
 	base := `SELECT u.id, u.name, u.username, u.employee_no, u.is_active, d.name AS department_name
 		FROM users u LEFT JOIN departments d ON d.id = u.department_id`
 	order := " ORDER BY u.is_active DESC, u.name"
-	switch {
-	case sc.All:
+	if sc.All {
 		return db.All(s.DB, base+order)
-	case len(sc.DeptIDs) > 0:
-		args := []any{sc.UserID}
+	}
+	cond := "u.id = ?"
+	args := []any{sc.UserID}
+	if len(sc.UserIDs) > 0 {
+		cond += " OR u.id IN (" + db.Placeholders(len(sc.UserIDs)) + ")"
+		for _, id := range sc.UserIDs {
+			args = append(args, id)
+		}
+	}
+	if len(sc.DeptIDs) > 0 {
+		cond += " OR u.department_id IN (" + db.Placeholders(len(sc.DeptIDs)) + ")"
 		for _, id := range sc.DeptIDs {
 			args = append(args, id)
 		}
-		return db.All(s.DB, base+" WHERE u.id = ? OR u.department_id IN ("+db.Placeholders(len(sc.DeptIDs))+")"+order, args...)
-	default:
-		return db.All(s.DB, base+" WHERE u.id = ?", sc.UserID)
 	}
+	return db.All(s.DB, base+" WHERE "+cond+order, args...)
 }
 
 // ActiveAdminOptions 用于导入默认记录人等。
 func (s *Users) AllBrief() ([]Row, error) {
 	return db.All(s.DB, "SELECT id, name, username, employee_no, is_active FROM users ORDER BY is_active DESC, name")
+}
+
+// OrgNode 组织架构图节点（按主管领导关系）。
+type OrgNode struct {
+	ID         int64
+	Name       string
+	EmployeeNo string
+	Role       string
+	Department string
+	Active     bool
+	TeamSize   int // 直接 + 间接下属人数
+	Children   []*OrgNode
+}
+
+// OrgChart 返回按主管领导关系组织的树：Trees 为有下属或有上级的人员组成的树，
+// Unassigned 为既无上级也无下属的人员。数据异常形成环时，环上人员作为根节点展示，不会死循环。
+func (s *Users) OrgChart() (trees []*OrgNode, unassigned []*OrgNode, err error) {
+	rows, err := db.All(s.DB, `SELECT u.id, u.name, u.employee_no, u.role, u.is_active, u.supervisor_id,
+		d.name AS department_name, pd.name AS parent_department_name
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
+		ORDER BY u.is_active DESC, COALESCE(pd.name, d.name, u.name), d.name, u.name`)
+	if err != nil {
+		return nil, nil, err
+	}
+	nodes := map[int64]*OrgNode{}
+	parent := map[int64]int64{}
+	var order []int64
+	for _, r := range rows {
+		id := r.Int("id")
+		nodes[id] = &OrgNode{ID: id, Name: r.Str("name"), EmployeeNo: r.Str("employee_no"), Role: r.Str("role"),
+			Department: deptLabel(r["department_name"], r["parent_department_name"]), Active: r.Bool("is_active")}
+		if sid := r.Int("supervisor_id"); sid > 0 && sid != id {
+			parent[id] = sid
+		}
+		order = append(order, id)
+	}
+	// 判断某节点沿上级链能否走到根（无环）。
+	reachesRoot := func(id int64) bool {
+		seen := map[int64]bool{}
+		for {
+			if seen[id] {
+				return false
+			}
+			seen[id] = true
+			p, ok := parent[id]
+			if !ok || nodes[p] == nil {
+				return true
+			}
+			id = p
+		}
+	}
+	isRoot := map[int64]bool{}
+	for _, id := range order {
+		p, ok := parent[id]
+		if !ok || nodes[p] == nil || !reachesRoot(id) {
+			isRoot[id] = true
+			continue
+		}
+		nodes[p].Children = append(nodes[p].Children, nodes[id])
+	}
+	var count func(n *OrgNode, depth int) int
+	count = func(n *OrgNode, depth int) int {
+		if depth > 1000 {
+			return 0
+		}
+		total := 0
+		for _, c := range n.Children {
+			total += 1 + count(c, depth+1)
+		}
+		n.TeamSize = total
+		return total
+	}
+	for _, id := range order {
+		if !isRoot[id] {
+			continue
+		}
+		n := nodes[id]
+		count(n, 0)
+		if len(n.Children) == 0 {
+			unassigned = append(unassigned, n)
+		} else {
+			trees = append(trees, n)
+		}
+	}
+	return trees, unassigned, nil
 }

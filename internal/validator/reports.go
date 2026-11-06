@@ -41,10 +41,32 @@ func APIScope(in Input) (APIScopeInput, error) {
 	return out, nil
 }
 
+var targetRe = regexp.MustCompile(`^(self|team|dept:[1-9]\d{0,17}|user:[1-9]\d{0,17})$`)
+
+// Target 报告统计范围：""、self、team、dept:ID、user:ID。格式不对时记错误。
+func (v *V) Target(key string) string {
+	raw := v.Raw(key)
+	if raw != "" && !targetRe.MatchString(raw) {
+		v.Fail(key, "统计范围无效。")
+		return ""
+	}
+	return raw
+}
+
+// LenientTarget 页面查询用：格式不对时按默认范围处理，不报错。
+func LenientTarget(in Input, key string) string {
+	raw := strings.TrimSpace(New(in).Raw(key))
+	if targetRe.MatchString(raw) {
+		return raw
+	}
+	return ""
+}
+
 // WeeklyGenerateInput 周报页面生成参数。
 type WeeklyGenerateInput struct {
 	WeekStart    string
-	DepartmentID int64
+	Target       string
+	DepartmentID int64 // 旧参数，兼容
 	Style        string
 }
 
@@ -52,6 +74,7 @@ func WeeklyGenerate(in Input) (any, error) {
 	v := New(in)
 	out := WeeklyGenerateInput{
 		WeekStart:    v.Date("week_start", "周起始日期", true),
+		Target:       v.Target("target"),
 		DepartmentID: v.ID("department_id"),
 		Style:        v.OneOf("style", "写作风格", "normal", "concise", "normal", "detailed"),
 	}
@@ -61,6 +84,7 @@ func WeeklyGenerate(in Input) (any, error) {
 // YearlyGenerateInput 年度总结生成参数。
 type YearlyGenerateInput struct {
 	Year         int
+	Target       string
 	DepartmentID int64
 	Style        string
 }
@@ -69,6 +93,7 @@ func YearlyGenerate(in Input) (any, error) {
 	v := New(in)
 	out := YearlyGenerateInput{
 		Year:         int(v.IntRange("year", "年度", 0, 2000, 2100)),
+		Target:       v.Target("target"),
 		DepartmentID: v.ID("department_id"),
 		Style:        v.OneOf("style", "写作风格", "normal", "concise", "normal", "detailed"),
 	}
@@ -78,6 +103,7 @@ func YearlyGenerate(in Input) (any, error) {
 // PeriodGenerateInput 时段总结生成参数。
 type PeriodGenerateInput struct {
 	StartDate, EndDate string
+	Target             string
 	DepartmentID       int64
 	Style              string
 }
@@ -87,6 +113,7 @@ func PeriodGenerate(in Input) (any, error) {
 	out := PeriodGenerateInput{
 		StartDate:    v.Date("start_date", "开始日期", true),
 		EndDate:      v.Date("end_date", "结束日期", true),
+		Target:       v.Target("target"),
 		DepartmentID: v.ID("department_id"),
 		Style:        v.OneOf("style", "写作风格", "normal", "concise", "normal", "detailed"),
 	}
@@ -94,6 +121,33 @@ func PeriodGenerate(in Input) (any, error) {
 		v.Fail("end_date", "结束日期不能早于开始日期。")
 	}
 	return out, v.Err()
+}
+
+// WeeklyExportInput 周报中心“导出本周期台账”参数（文件下载，GET）。
+type WeeklyExportInput struct {
+	Format       string
+	WeekStart    string
+	Target       string
+	DepartmentID int64
+}
+
+func WeeklyExport(in Input) (WeeklyExportInput, error) {
+	v := New(in)
+	out := WeeklyExportInput{
+		Format:       v.OneOf("format", "导出格式", "xlsx", "xlsx", "csv"),
+		WeekStart:    v.Date("week_start", "周期日期", true),
+		Target:       v.Target("target"),
+		DepartmentID: v.ID("department_id"),
+	}
+	return out, v.Err()
+}
+
+// PermissionsInput 领导权限设置。
+type PermissionsInput struct{ LeaderCanEdit bool }
+
+func Permissions(in Input) (any, error) {
+	v := New(in)
+	return PermissionsInput{LeaderCanEdit: v.Bool("leader_can_edit")}, v.Err()
 }
 
 // WeekCycleInput 周报周期设置。

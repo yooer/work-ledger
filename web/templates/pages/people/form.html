@@ -14,12 +14,17 @@
                     <option value="manager"{{if eq (str .Old.role) "manager"}} selected{{end}}>部门经理</option>
                     <option value="admin"{{if eq (str .Old.role) "admin"}} selected{{end}}>系统管理员</option>
                 </select>
-                {{if .IsSelf}}<input type="hidden" name="role" value="{{.Old.role}}"><div class="form-hint">不能修改自己的角色。</div>{{else}}<div class="form-hint">部门经理可查看、导出本部门（含子部门）台账并生成部门总结。</div>{{end}}
+                {{if .IsSelf}}<input type="hidden" name="role" value="{{.Old.role}}"><div class="form-hint">不能修改自己的角色。</div>{{else}}<div class="form-hint">部门经理可查看、导出本部门（含子部门）台账并生成部门总结；任何人只要有下属，也可查看、导出下属台账。</div>{{end}}
             </div>
             <div class="col-md-6 mb-3"><label class="form-label">所属部门</label>
                 <select class="form-select" name="department_id" data-tom><option value="0">未分配部门</option>
                 {{$sel := .Old.department_id}}{{range .Departments}}<option value="{{.id}}"{{if same .id $sel}} selected{{end}}>{{.label}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
                 </select></div>
+            <div class="col-md-6 mb-3"><label class="form-label">主管领导</label>
+                <select class="form-select" name="supervisor_id" data-tom><option value="0">无</option>
+                {{$sup := .Old.supervisor_id}}{{range .Supervisors}}<option value="{{.id}}"{{if same .id $sup}} selected{{end}}>{{.name}}{{if .employee_no}}（{{.employee_no}}）{{end}}{{if .department_name}} · {{.department_name}}{{end}}{{if ne .is_active 1}} · 已停用{{end}}</option>{{end}}
+                </select>
+                <div class="form-hint">主管领导可查看、导出该员工及其下属的台账并生成团队总结；可跨部门设置。</div></div>
             <div class="col-md-6 mb-3"><label class="form-label">联系电话</label><input class="form-control" type="text" name="phone" value="{{str .Old.phone}}" maxlength="30"></div>
             <div class="col-md-6 mb-3"><label class="form-label">电子邮箱</label><input class="form-control" type="email" name="email" value="{{str .Old.email}}" maxlength="120"></div>
             <div class="col-md-6 mb-3"><label class="form-label">状态</label>
@@ -55,8 +60,16 @@
             <button type="button" class="btn btn-outline-danger w-100" data-ajax-click data-url="/people/ajax" data-action="reset_totp" data-payload='{"id":{{.Old.id}}}' data-confirm="确定重置该员工的二次验证？旧密钥和全部恢复码将失效。"{{if not (same .Old.totp_enabled 1)}} disabled{{end}}>重置二次验证</button>
         </div>
     </div>
+    <div class="card mt-3">
+        <div class="card-header"><h3 class="card-title">{{icon "people"}} 直接下属</h3></div>
+        {{if .DirectReports}}<div class="list-group list-group-flush">
+            {{range .DirectReports}}<a class="list-group-item list-group-item-action d-flex justify-content-between" href="/people/{{.id}}/edit"><span>{{.name}}{{if .employee_no}} <span class="text-secondary small">{{.employee_no}}</span>{{end}}</span><span class="small text-secondary">{{default "未分配部门" .department_name}}{{if ne .is_active 1}} · 已停用{{end}}</span></a>{{end}}
+        </div>{{else}}<div class="card-body small text-secondary">暂无。在其他员工资料中把“主管领导”设为该员工即可建立汇报关系。</div>{{end}}
+    </div>
     <div class="card mt-3"><div class="card-body small text-secondary">
         创建时间：{{dt (str .Old.created_at)}}<br>更新时间：{{dt (str .Old.updated_at)}}<br>最后登录：{{dt (str .Old.last_login_at)}}
     </div></div>
 </div>{{end}}
 </div>{{end}}
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script>WL.initTom(document);</script>{{end}}

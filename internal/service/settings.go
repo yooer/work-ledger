@@ -22,6 +22,7 @@ const (
 	SettingAutoYearlyTime  = "auto_yearly_time"
 	SettingAutoYearlyStyle = "auto_yearly_style"
 	SettingSchedulerLast   = "scheduler_last_result"
+	SettingLeaderCanEdit   = "leader_can_edit_records" // 允许主管领导/部门经理修改下属台账
 )
 
 // DefaultSettings 安装时写入的默认值（已存在则不覆盖）。自动生成默认关闭。
@@ -36,6 +37,7 @@ var DefaultSettings = map[string]string{
 	SettingAutoYearlyDay:   "2",
 	SettingAutoYearlyTime:  "08:00",
 	SettingAutoYearlyStyle: "normal",
+	SettingLeaderCanEdit:   "1",
 }
 
 type Settings struct {
@@ -85,6 +87,18 @@ func (s *Settings) GetInt(name string, def int) int {
 }
 
 func (s *Settings) Bool(name string) bool { return s.Get(name, "0") == "1" }
+
+// LeaderCanEdit 是否允许领导修改下属台账（未设置时默认允许）。
+func (s *Settings) LeaderCanEdit() bool { return s.Get(SettingLeaderCanEdit, "") == "1" }
+
+// SetLeaderCanEdit 保存“允许领导修改下属台账”开关。
+func (s *Settings) SetLeaderCanEdit(on bool) error {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	return s.Set(SettingLeaderCanEdit, v)
+}
 
 func (s *Settings) set(q db.Q, name, value string) error {
 	_, err := db.Exec(q, `INSERT INTO app_settings (name, value, updated_at) VALUES (?, ?, ?)

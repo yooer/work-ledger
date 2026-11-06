@@ -5,7 +5,8 @@ import (
 	"work-ledger/internal/db"
 )
 
-// Categories 工作分类与集客项目子分类（只增改、不删除）。
+// Categories 工作分类与子分类（只增改、不删除）。任何一级分类都可以有子分类；
+// “集客业务”属性仅作为统计口径（报告中的集客统计），不再限制子分类。
 type Categories struct{ *Core }
 
 func (s *Categories) Work(activeOnly bool) ([]Row, error) {
@@ -98,15 +99,6 @@ func (s *Categories) SaveWork(in WorkCategoryInput) (bool, error) {
 	} else if dup != nil {
 		fields["name"] = "工作分类名称已存在。"
 	}
-	if existing != nil && existing.Bool("is_customer_project") && !in.IsCustomer {
-		n, err := db.Int(s.DB, "SELECT COUNT(*) FROM project_categories WHERE work_category_id = ?", in.ID)
-		if err != nil {
-			return false, err
-		}
-		if n > 0 {
-			fields["is_customer_project"] = "该分类下已有集客项目子分类，不能取消“集客业务”属性（子分类不可删除，以免破坏历史数据）。"
-		}
-	}
 	if len(fields) > 0 {
 		return false, apperr.Validation(fields)
 	}
@@ -121,7 +113,7 @@ func (s *Categories) SaveWork(in WorkCategoryInput) (bool, error) {
 	return false, err
 }
 
-// ProjectInput 集客项目子分类表单。
+// ProjectInput 子分类表单。
 type ProjectInput struct {
 	ID             int64
 	WorkCategoryID int64
@@ -138,7 +130,7 @@ func (s *Categories) SaveProject(in ProjectInput) (bool, error) {
 			return false, err
 		}
 		if existing == nil {
-			return false, apperr.NotFound("集客项目子分类不存在。")
+			return false, apperr.NotFound("子分类不存在。")
 		}
 		if in.WorkCategoryID != existing.Int("work_category_id") {
 			return false, apperr.New("已有子分类不能更换所属的一级工作分类，以免历史台账分类错位。")
@@ -149,12 +141,12 @@ func (s *Categories) SaveProject(in ProjectInput) (bool, error) {
 		return false, err
 	}
 	fields := map[string]string{}
-	if cat == nil || !cat.Bool("is_customer_project") {
-		fields["work_category_id"] = "集客项目子分类必须归属于“集客业务”类型的分类。"
+	if cat == nil {
+		fields["work_category_id"] = "请选择所属的一级工作分类。"
 	} else if dup, err := db.Value(s.DB, "SELECT id FROM project_categories WHERE work_category_id = ? AND name = ? AND id <> ?", in.WorkCategoryID, in.Name, in.ID); err != nil {
 		return false, err
 	} else if dup != nil {
-		fields["name"] = "该集客分类下已存在同名子分类。"
+		fields["name"] = "该工作分类下已存在同名子分类。"
 	}
 	if len(fields) > 0 {
 		return false, apperr.Validation(fields)

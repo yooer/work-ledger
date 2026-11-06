@@ -22,7 +22,8 @@ type KV interface {
 type Auth struct{ *Core }
 
 const userSelect = `SELECT u.*, d.name AS department_name, d.parent_id AS department_parent_id,
-	pd.name AS parent_department_name
+	pd.name AS parent_department_name,
+	EXISTS (SELECT 1 FROM users sub WHERE sub.supervisor_id = u.id AND sub.id <> u.id) AS has_subordinates
 	FROM users u
 	LEFT JOIN departments d ON d.id = u.department_id
 	LEFT JOIN departments pd ON pd.id = d.parent_id`

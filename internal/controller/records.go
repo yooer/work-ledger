@@ -15,7 +15,8 @@ import (
 func (c *Controllers) registerRecords(app *web.App) {
 	app.Page("/records", web.Admin, func(ctx *web.Ctx) error { return c.recordsPage(ctx, "all") })
 	app.Page("/my-records", web.Login, func(ctx *web.Ctx) error { return c.recordsPage(ctx, "mine") })
-	app.Page("/department-records", web.AdminManager, func(ctx *web.Ctx) error { return c.recordsPage(ctx, "dept") })
+	app.Page("/team-records", web.AdminManager, func(ctx *web.Ctx) error { return c.recordsPage(ctx, "team") })
+	app.Page("/department-records", web.Login, func(ctx *web.Ctx) error { return ctx.Redirect("/team-records") }) // 旧地址
 	app.Page("/records/create", web.Login, c.recordForm)
 	app.Page("/records/{id}", web.Login, c.recordShow)
 	app.Page("/records/{id}/edit", web.Login, c.recordForm)
@@ -25,7 +26,7 @@ func (c *Controllers) registerRecords(app *web.App) {
 	})
 }
 
-// recordMode 描述三种台账列表：全部（管理员）、我的、部门（经理）。
+// recordMode 描述三种台账列表：全部（管理员）、我的、团队（部门经理 / 主管领导）。
 type recordMode struct {
 	Key, Title, BaseURL, Active string
 	ShowEmployee, ShowDept      bool
@@ -34,7 +35,7 @@ type recordMode struct {
 var recordModes = map[string]recordMode{
 	"all":  {Key: "all", Title: "全部工作台账", BaseURL: "/records", Active: "records", ShowEmployee: true, ShowDept: true},
 	"mine": {Key: "mine", Title: "我的台账", BaseURL: "/my-records", Active: "my-records"},
-	"dept": {Key: "dept", Title: "部门台账", BaseURL: "/department-records", Active: "dept-records", ShowEmployee: true},
+	"team": {Key: "team", Title: "团队台账", BaseURL: "/team-records", Active: "team-records", ShowEmployee: true},
 }
 
 // recordQuery 解析筛选条件并按模式限定范围。
@@ -49,9 +50,9 @@ func (c *Controllers) recordQuery(ctx *web.Ctx, mode string) (service.Scope, ser
 	case "mine":
 		f.CreatorID = ctx.UserID()
 		in.EmployeeID, in.DepartmentID = 0, 0
-	case "dept":
-		if !sc.All && !sc.IsManagerScope() {
-			return sc, f, in, apperr.Forbidden("你还没有分配部门，无法查看部门台账。")
+	case "team":
+		if !sc.All && !sc.IsTeamScope() {
+			return sc, f, in, apperr.Forbidden("你目前没有下属，也没有分管部门，无法查看团队台账。")
 		}
 		f.EmployeeID = in.EmployeeID
 		in.DepartmentID = 0
@@ -78,6 +79,19 @@ func filterQuery(in validator.RecordFilterInput) url.Values {
 	return q
 }
 
+// exportURLs 生成各格式的完整导出地址。整条地址在后端拼好再交给模板，
+// 避免模板把查询串里的 = 和 & 当作参数值转义（曾导致筛选条件丢失、导出全部记录）。
+func exportURLs(in validator.RecordFilterInput, mode string) map[string]string {
+	out := map[string]string{}
+	for _, format := range []string{"csv", "xlsx", "json"} {
+		q := filterQuery(in)
+		q.Set("mode", mode)
+		q.Set("format", format)
+		out[format] = "/records/export?" + q.Encode()
+	}
+	return out
+}
+
 func (c *Controllers) recordsPage(ctx *web.Ctx, mode string) error {
 	m := recordModes[mode]
 	sc, f, in, err := c.recordQuery(ctx, mode)
@@ -101,9 +115,7 @@ func (c *Controllers) recordsPage(ctx *web.Ctx, mode string) error {
 		"Categories": cats, "Projects": projects,
 		"Pager": web.NewPager(res.Page, res.Total, res.PerPage, m.BaseURL, filterQuery(in)),
 	}
-	exportQuery := filterQuery(in)
-	exportQuery.Set("mode", mode)
-	data["ExportQuery"] = exportQuery.Encode()
+	data["ExportURLs"] = exportURLs(in, mode)
 	if m.ShowEmployee {
 		if data["Employees"], err = c.S.Users.EmployeeOptions(sc); err != nil {
 			return err
@@ -114,9 +126,13 @@ func (c *Controllers) recordsPage(ctx *web.Ctx, mode string) error {
 			return err
 		}
 	}
-	if mode == "dept" && len(sc.DeptIDs) > 0 {
-		label, _ := c.S.Depts.LabelByID(sc.DeptIDs[0])
-		data["DeptLabel"] = label
+	if mode == "team" {
+		if len(sc.DeptIDs) > 0 {
+			label, _ := c.S.Depts.LabelByID(sc.DeptIDs[0])
+			data["DeptLabel"] = label
+		}
+		data["SubordinateCount"] = len(sc.UserIDs)
+		data["LeaderCanEdit"] = c.S.Settings.LeaderCanEdit()
 	}
 	return ctx.Render("records/index", data)
 }
@@ -131,7 +147,7 @@ func (c *Controllers) recordShow(ctx *web.Ctx) error {
 		return err
 	}
 	return ctx.Render("records/show", map[string]any{
-		"PageTitle": "工作详情", "Active": "my-records", "Record": rec, "CanEdit": service.CanEditRecord(rec, ctx.User),
+		"PageTitle": "工作详情", "Active": "my-records", "Record": rec, "CanEdit": c.S.Records.CanEditRecord(sc, rec, ctx.User),
 	})
 }
 
@@ -151,8 +167,8 @@ func (c *Controllers) recordForm(ctx *web.Ctx) error {
 		if rec, err = c.S.Records.Find(sc, id); err != nil {
 			return err
 		}
-		if !service.CanEditRecord(rec, ctx.User) {
-			return apperr.Forbidden("你只能修改自己创建的工作记录。")
+		if !c.S.Records.CanEditRecord(sc, rec, ctx.User) {
+			return apperr.Forbidden("你没有修改这条工作记录的权限。")
 		}
 		old = map[string]any{
 			"id": rec.Int("id"), "work_category_id": rec.Int("work_category_id"), "project_category_id": rec.Int("project_category_id"),

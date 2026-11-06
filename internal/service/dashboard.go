@@ -87,8 +87,8 @@ func (s *Dashboard) Build(user Row) (*DashboardData, error) {
 	switch {
 	case sc.All:
 		d.ScopeLabel = "全公司"
-	case sc.IsManagerScope():
-		d.ScopeLabel = "本人及本部门"
+	case sc.IsTeamScope():
+		d.ScopeLabel = "本人及团队"
 	default:
 		d.ScopeLabel = "本人"
 	}

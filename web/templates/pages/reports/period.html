@@ -6,7 +6,7 @@
         {{template "report-scope-select" .}}
         <div class="col-md-auto"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button></div>
     </form>
-    <div class="btn-list mt-3">{{$dept := .SelectedDept}}{{range .Presets}}<a class="btn btn-sm btn-outline-secondary" href="/reports/period?start_date={{.start}}&end_date={{.end}}{{if gt $dept 0}}&department_id={{$dept}}{{end}}">{{.label}}</a>{{end}}</div>
+    <div class="btn-list mt-3">{{$t := .TargetKey}}{{range .Presets}}<a class="btn btn-sm btn-outline-secondary" href="/reports/period?start_date={{.start}}&end_date={{.end}}{{if $t}}&target={{$t}}{{end}}">{{.label}}</a>{{end}}</div>
     <div class="small text-secondary mt-2">总结时段：<strong>{{.Data.Period.Label}}</strong>（{{.Data.Period.Start}} 至 {{.Data.Period.End}}，共 {{.Data.Period.Days}} 天）· 统计范围：<strong>{{.Data.Scope.Label}}</strong>{{if .Partial}} · <span class="text-warning">时段尚未结束，数据截至今天</span>{{end}}</div>
 </div></div>
 {{template "report-stats" .Data}}
@@ -21,13 +21,14 @@
         <form data-ajax data-url="/reports/period/ajax" data-action="generate" novalidate>
             <input type="hidden" name="start_date" value="{{.Start}}">
             <input type="hidden" name="end_date" value="{{.End}}">
-            <input type="hidden" name="department_id" value="{{.SelectedDept}}">
+            <input type="hidden" name="target" value="{{.TargetKey}}">
             {{template "report-generate" .}}
         </form>
         {{template "report-history" (dict "Items" .History "Base" "/reports/period")}}
     </div>
 </div>{{end}}
-{{define "scripts"}}<script src="{{asset "libs/litepicker/litepicker.js"}}"></script>
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script src="{{asset "libs/litepicker/litepicker.js"}}"></script>
 <script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
 <script src="{{asset "js/reports.js"}}"></script>
 <script>

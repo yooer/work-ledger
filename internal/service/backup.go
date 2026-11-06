@@ -19,6 +19,7 @@ import (
 
 	"work-ledger/internal/apperr"
 	"work-ledger/internal/db"
+	"work-ledger/internal/password"
 	"work-ledger/internal/session"
 	"work-ledger/internal/timeutil"
 )
@@ -32,22 +33,25 @@ const (
 )
 
 // backupTables 字段顺序同时用于导出、校验和恢复（与 PHP 版 TABLE_COLUMNS 一致）。
+// optional 是 Go 版新增的字段：导出时追加在末尾，恢复时可缺失（兼容 PHP 版备份）。
 var backupTables = []struct {
-	name string
-	cols []string
+	name     string
+	cols     []string
+	optional []string
 }{
-	{"departments", []string{"id", "name", "parent_id", "is_active", "sort_order", "created_at", "updated_at"}},
+	{"departments", []string{"id", "name", "parent_id", "is_active", "sort_order", "created_at", "updated_at"}, nil},
 	{"users", []string{"id", "username", "password_hash", "name", "employee_no", "role", "department_id", "phone", "email", "is_active",
-		"totp_secret", "totp_enabled", "totp_recovery_codes", "totp_last_used_step", "last_login_at", "created_at", "updated_at"}},
-	{"work_categories", []string{"id", "name", "is_customer_project", "is_active", "sort_order", "created_at", "updated_at"}},
-	{"project_categories", []string{"id", "work_category_id", "name", "is_active", "sort_order", "created_at", "updated_at"}},
+		"totp_secret", "totp_enabled", "totp_recovery_codes", "totp_last_used_step", "last_login_at", "created_at", "updated_at"},
+		[]string{"supervisor_id"}},
+	{"work_categories", []string{"id", "name", "is_customer_project", "is_active", "sort_order", "created_at", "updated_at"}, nil},
+	{"project_categories", []string{"id", "work_category_id", "name", "is_active", "sort_order", "created_at", "updated_at"}, nil},
 	{"work_records", []string{"id", "work_category_id", "project_category_id", "content", "work_at", "difficulty", "work_count",
-		"department_id", "created_by", "created_at", "updated_by", "updated_at", "import_hash"}},
-	{"work_record_participants", []string{"work_record_id", "user_id"}},
-	{"weekly_reports", []string{"id", "week_start", "week_end", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}},
-	{"annual_reports", []string{"id", "report_year", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}},
-	{"period_reports", []string{"id", "start_date", "end_date", "period_label", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}},
-	{"app_settings", []string{"name", "value", "updated_at"}},
+		"department_id", "created_by", "created_at", "updated_by", "updated_at", "import_hash"}, nil},
+	{"work_record_participants", []string{"work_record_id", "user_id"}, nil},
+	{"weekly_reports", []string{"id", "week_start", "week_end", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}, []string{"team_leader_id"}},
+	{"annual_reports", []string{"id", "report_year", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}, []string{"team_leader_id"}},
+	{"period_reports", []string{"id", "start_date", "end_date", "period_label", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}, []string{"team_leader_id"}},
+	{"app_settings", []string{"name", "value", "updated_at"}, nil},
 }
 
 var deleteOrder = []string{"work_record_participants", "weekly_reports", "annual_reports", "period_reports", "work_records",
@@ -55,10 +59,11 @@ var deleteOrder = []string{"work_record_participants", "weekly_reports", "annual
 var insertOrder = []string{"users", "work_categories", "project_categories", "work_records", "work_record_participants",
 	"weekly_reports", "annual_reports", "period_reports", "app_settings"}
 
+// tableCols 返回导出/写入使用的全部字段（必需字段 + 可选字段）。
 func tableCols(name string) []string {
 	for _, t := range backupTables {
 		if t.name == name {
-			return t.cols
+			return append(append([]string{}, t.cols...), t.optional...)
 		}
 	}
 	return nil
@@ -92,7 +97,8 @@ func (s *Backup) ExportJSON() ([]byte, error) {
 		var tables bytes.Buffer
 		tables.WriteString("{")
 		for ti, t := range backupTables {
-			rows, err := db.All(tx, "SELECT "+strings.Join(t.cols, ", ")+" FROM "+t.name+orderBy(t.name))
+			cols := tableCols(t.name)
+			rows, err := db.All(tx, "SELECT "+strings.Join(cols, ", ")+" FROM "+t.name+orderBy(t.name))
 			if err != nil {
 				return err
 			}
@@ -107,7 +113,7 @@ func (s *Backup) ExportJSON() ([]byte, error) {
 					tables.WriteString(",")
 				}
 				tables.WriteString("{")
-				for ci, c := range t.cols {
+				for ci, c := range cols {
 					if ci > 0 {
 						tables.WriteString(",")
 					}
@@ -476,12 +482,32 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 }
 
 func insertRows(tx db.Q, table string, rows []map[string]any) error {
+	if table == "users" {
+		// 主管领导可能引用 id 更大的用户：先写 NULL，全部写入后再补主管关系。
+		if err := insertRowsWith(tx, table, rows, map[string]bool{"supervisor_id": true}); err != nil {
+			return err
+		}
+		for i, r := range rows {
+			if v := sqlValue(r["supervisor_id"]); v != nil {
+				if _, err := db.Exec(tx, "UPDATE users SET supervisor_id = ? WHERE id = ?", v, sqlValue(r["id"])); err != nil {
+					return fmt.Errorf("写入 users 第 %d 行主管领导失败：%w", i+1, err)
+				}
+			}
+		}
+		return nil
+	}
+	return insertRowsWith(tx, table, rows, nil)
+}
+
+func insertRowsWith(tx db.Q, table string, rows []map[string]any, nullCols map[string]bool) error {
 	cols := tableCols(table)
 	q := "INSERT INTO " + table + " (" + strings.Join(cols, ", ") + ") VALUES (" + db.Placeholders(len(cols)) + ")"
 	for i, r := range rows {
 		args := make([]any, len(cols))
 		for j, c := range cols {
-			args[j] = sqlValue(r[c])
+			if !nullCols[c] {
+				args[j] = sqlValue(r[c])
+			}
 		}
 		if _, err := db.Exec(tx, q, args...); err != nil {
 			return fmt.Errorf("写入 %s 第 %d 行失败：%w", table, i+1, err)
@@ -502,4 +528,57 @@ func (s *Backup) SQLiteSnapshot(prefix string) (string, error) {
 	}
 	_ = os.Chmod(p, 0o600)
 	return p, nil
+}
+
+// ClearOptions 一键清空选项：工作记录与参与人员总是清空。
+type ClearOptions struct {
+	Categories bool // 同时清空工作分类和子分类
+	Reports    bool // 同时清空已生成的周报、年度总结、时段总结
+}
+
+// ClearResult 清空结果。
+type ClearResult struct {
+	Snapshot string
+	Deleted  map[string]int64
+}
+
+// ClearData 一键清空业务数据（仅管理员）：校验管理员密码 → 清空前自动完整备份 → 单事务删除。
+// 人员、部门、系统设置、登录会话不受影响。
+func (s *Backup) ClearData(admin Row, plainPassword string, opt ClearOptions) (*ClearResult, error) {
+	if admin.Str("role") != "admin" {
+		return nil, apperr.Forbidden("只有系统管理员可以清空数据。")
+	}
+	hash, err := db.Value(s.DB, "SELECT password_hash FROM users WHERE id = ? AND is_active = 1", admin.Int("id"))
+	if err != nil {
+		return nil, err
+	}
+	if hash == nil || !password.Verify(plainPassword, fmt.Sprint(hash)) {
+		return nil, apperr.Validation(map[string]string{"password": "管理员密码不正确。"})
+	}
+	snapshot, _, err := s.CreateSnapshot("pre-clear")
+	if err != nil {
+		return nil, apperr.New("清空前自动备份失败，已取消清空：" + err.Error())
+	}
+	tables := []string{"work_record_participants", "work_records"}
+	if opt.Reports {
+		tables = append(tables, "weekly_reports", "annual_reports", "period_reports")
+	}
+	if opt.Categories {
+		tables = append(tables, "project_categories", "work_categories")
+	}
+	res := &ClearResult{Snapshot: snapshot, Deleted: map[string]int64{}}
+	err = s.DB.Tx(func(tx db.Q) error {
+		for _, t := range tables {
+			n, err := db.Exec(tx, "DELETE FROM "+t)
+			if err != nil {
+				return fmt.Errorf("清空 %s 失败：%w", t, err)
+			}
+			res.Deleted[t] = n
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, apperr.New(err.Error() + "。数据未改动，清空前备份：" + snapshot)
+	}
+	return res, nil
 }

@@ -44,6 +44,9 @@ func (c *Ctx) UserID() int64 { return c.User.Int("id") }
 func (c *Ctx) IsAdmin() bool   { return c.User.Str("role") == "admin" }
 func (c *Ctx) IsManager() bool { return c.User.Str("role") == "manager" }
 
+// IsLeader 部门经理或有下属的主管领导（可看团队台账、生成团队总结）。
+func (c *Ctx) IsLeader() bool { return c.IsManager() || c.User.Bool("has_subordinates") }
+
 // Query 返回查询参数作为验证器输入。
 func (c *Ctx) Query() validator.Input { return validator.FromValues(c.R.URL.Query()) }
 
@@ -227,8 +230,8 @@ func (a *App) wrap(guard Guard, h HandlerFunc, isPost bool) http.Handler {
 					return
 				}
 			case AdminManager:
-				if !c.IsAdmin() && !c.IsManager() {
-					c.fail(apperr.Forbidden("该功能仅系统管理员或部门经理可以使用。"))
+				if !c.IsAdmin() && !c.IsLeader() {
+					c.fail(apperr.Forbidden("该功能仅系统管理员、部门经理或主管领导可以使用。"))
 					return
 				}
 			}

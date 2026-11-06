@@ -6,7 +6,16 @@
         <div class="col-md-auto d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button>
             <a class="btn btn-outline-secondary" href="{{.PrevURL}}">‹ 上一周期</a><a class="btn btn-outline-secondary" href="{{.NextURL}}">下一周期 ›</a></div>
     </form>
-    <div class="small text-secondary mt-2">当前周期：<strong>{{.WeekStart}} 至 {{.WeekEnd}}</strong> · 统计范围：<strong>{{.Data.Scope.Label}}</strong> · 周期设置：{{.CycleLabel}}{{if .IsAdmin}}（可在“系统与 AI”中修改）{{end}}</div>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+    <div class="small text-secondary">当前周期：<strong>{{.WeekStart}} 至 {{.WeekEnd}}</strong> · 统计范围：<strong>{{.Data.Scope.Label}}</strong> · 周期设置：{{.CycleLabel}}{{if .IsAdmin}}（可在“系统与 AI”中修改）{{end}}</div>
+    <div class="dropdown">
+        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">{{icon "export"}}导出本周期台账</button>
+        <div class="dropdown-menu dropdown-menu-end">
+            <a class="dropdown-item" href="{{.ExportURLs.xlsx}}">Excel（.xlsx）</a>
+            <a class="dropdown-item" href="{{.ExportURLs.csv}}">CSV（Excel 可直接打开）</a>
+        </div>
+    </div>
+    </div>
 </div></div>
 {{template "report-stats" .Data}}
 <div class="row row-cards">
@@ -19,13 +28,14 @@
     <div class="col-lg-4">
         <form data-ajax data-url="/reports/weekly/ajax" data-action="generate" novalidate>
             <input type="hidden" name="week_start" value="{{.WeekStart}}">
-            <input type="hidden" name="department_id" value="{{.SelectedDept}}">
+            <input type="hidden" name="target" value="{{.TargetKey}}">
             {{template "report-generate" .}}
         </form>
         {{template "report-history" (dict "Items" .History "Base" "/reports/weekly")}}
     </div>
 </div>{{end}}
-{{define "scripts"}}<script src="{{asset "libs/litepicker/litepicker.js"}}"></script>
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script src="{{asset "libs/litepicker/litepicker.js"}}"></script>
 <script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
 <script src="{{asset "js/reports.js"}}"></script>
 <script>

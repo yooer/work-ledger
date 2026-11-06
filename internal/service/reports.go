@@ -24,6 +24,7 @@ type ReportScope struct {
 	EmployeeName          *string `json:"employee_name"`
 	EmployeeNo            *string `json:"employee_no"`
 	Label                 string  `json:"label"`
+	TeamLeaderID          *int64  `json:"team_leader_id,omitempty"` // Go 版新增：团队总结
 }
 
 type CategoryStat struct {
@@ -153,6 +154,8 @@ type collectSpec struct {
 	Start, End      string // 含首尾的日期
 	DepartmentID    int64
 	EmployeeID      int64
+	TeamLeaderID    int64
+	Restrict        *Scope
 	IncludeChildren bool
 	MaxRecords      int
 }
@@ -233,6 +236,32 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 		} else {
 			parts = append(parts, name)
 		}
+	}
+	if sp.TeamLeaderID > 0 {
+		leader, err := db.One(c.DB, "SELECT id, name FROM users WHERE id = ?", sp.TeamLeaderID)
+		if err != nil {
+			return nil, err
+		}
+		if leader == nil {
+			return nil, apperr.New("指定的主管领导不存在。")
+		}
+		subs, err := subordinateIDs(c.DB, sp.TeamLeaderID)
+		if err != nil {
+			return nil, err
+		}
+		members := append([]int64{sp.TeamLeaderID}, subs...)
+		conds = append(conds, "r.created_by IN ("+db.Placeholders(len(members))+")")
+		for _, id := range members {
+			args = append(args, id)
+		}
+		id := sp.TeamLeaderID
+		scope.TeamLeaderID = &id
+		parts = append(parts, leader.Str("name")+"的团队（含下属 "+strconv.Itoa(len(subs))+" 人）")
+	}
+	if sp.Restrict != nil {
+		cond, rargs := sp.Restrict.SQL("r")
+		conds = append(conds, cond)
+		args = append(args, rargs...)
 	}
 	scope.Label = "全公司"
 	if len(parts) > 0 {
@@ -547,82 +576,233 @@ func participantMap(q db.Q, rows []Row) (map[int64][]RecordPerson, error) {
 // 报告范围（谁能为哪个范围生成/查看报告）
 // ---------------------------------------------------------------------------
 
-// ReportTarget 是一次报告的统计对象。
+// ReportTarget 是一次报告的统计对象（三者至多一个非零；都为零表示全公司）。
 type ReportTarget struct {
 	DepartmentID int64
 	EmployeeID   int64
+	TeamLeaderID int64  // 某人及其全部直接、间接下属
+	Restrict     *Scope // 非管理员查看他人时，额外限定在自己的可见范围内
+}
+
+// Key 报告页“统计范围”下拉的取值：""（默认）、self、team、dept:ID、user:ID。
+func (t ReportTarget) Key(selfID int64) string {
+	switch {
+	case t.TeamLeaderID > 0:
+		return "team"
+	case t.DepartmentID > 0:
+		return "dept:" + strconv.FormatInt(t.DepartmentID, 10)
+	case t.EmployeeID > 0 && t.EmployeeID == selfID:
+		return "self"
+	case t.EmployeeID > 0:
+		return "user:" + strconv.FormatInt(t.EmployeeID, 10)
+	}
+	return ""
+}
+
+// ParseTargetKey 解析统计范围取值，返回类型与 ID。格式不对时返回 ("", 0)。
+func ParseTargetKey(key string) (string, int64) {
+	switch key {
+	case "self", "team":
+		return key, 0
+	}
+	for _, prefix := range []string{"dept:", "user:"} {
+		if strings.HasPrefix(key, prefix) {
+			if id, err := strconv.ParseInt(key[len(prefix):], 10, 64); err == nil && id > 0 {
+				return strings.TrimSuffix(prefix, ":"), id
+			}
+		}
+	}
+	return "", 0
 }
 
 // ResolveTarget 根据角色确定统计对象：
-//   - 管理员：全公司或任意部门（department_id=0 表示全公司）
-//   - 部门经理：本人，或本部门/子部门
+//   - 管理员：全公司（默认）、任意部门、任意人员、本人；有下属时还可选“我的团队”
+//   - 部门经理 / 主管领导：本人（默认）、我的团队、分管部门、团队成员
 //   - 员工：仅本人
-func (c *Core) ResolveTarget(user Row, requestedDept int64) (ReportTarget, error) {
-	switch user.Str("role") {
-	case "admin":
-		if requestedDept > 0 {
-			if v, err := db.Value(c.DB, "SELECT id FROM departments WHERE id = ?", requestedDept); err != nil {
-				return ReportTarget{}, err
-			} else if v == nil {
-				return ReportTarget{}, apperr.New("所选部门不存在。")
-			}
-		}
-		return ReportTarget{DepartmentID: requestedDept}, nil
-	case "manager":
-		if requestedDept > 0 {
-			sc, err := c.ScopeFor(user)
-			if err != nil {
-				return ReportTarget{}, err
-			}
-			if !sc.CoversDepartment(requestedDept) {
-				return ReportTarget{}, apperr.Forbidden("只能生成本部门（含子部门）的工作总结。")
-			}
-			return ReportTarget{DepartmentID: requestedDept}, nil
-		}
+//
+// key 为空时兼容旧参数 department_id。
+func (c *Core) ResolveTarget(user Row, key string, legacyDept int64) (ReportTarget, error) {
+	selfID := user.Int("id")
+	kind, id := ParseTargetKey(key)
+	if kind == "" && legacyDept > 0 {
+		kind, id = "dept", legacyDept
 	}
-	return ReportTarget{EmployeeID: user.Int("id")}, nil
-}
-
-// ReportDeptOptions 报告页的部门下拉选项（员工为空）。
-func (c *Core) ReportDeptOptions(user Row) ([]Row, error) {
-	switch user.Str("role") {
-	case "admin":
-		return departmentTree(c.DB)
-	case "manager":
-		sc, err := c.ScopeFor(user)
-		if err != nil || len(sc.DeptIDs) == 0 {
-			return nil, err
-		}
-		all, err := departmentTree(c.DB)
+	isAdmin := user.Str("role") == "admin"
+	sc, err := c.ScopeFor(user)
+	if err != nil {
+		return ReportTarget{}, err
+	}
+	switch kind {
+	case "self":
+		return ReportTarget{EmployeeID: selfID}, nil
+	case "team":
+		subs, err := subordinateIDs(c.DB, selfID)
 		if err != nil {
-			return nil, err
+			return ReportTarget{}, err
 		}
-		var out []Row
-		for _, d := range all {
-			if sc.CoversDepartment(d.Int("id")) {
-				out = append(out, d)
-			}
+		if len(subs) == 0 {
+			return ReportTarget{}, apperr.Forbidden("你目前没有下属，无法生成团队总结。")
 		}
-		return out, nil
+		return ReportTarget{TeamLeaderID: selfID}, nil
+	case "dept":
+		if v, err := db.Value(c.DB, "SELECT id FROM departments WHERE id = ?", id); err != nil {
+			return ReportTarget{}, err
+		} else if v == nil {
+			return ReportTarget{}, apperr.New("所选部门不存在。")
+		}
+		if !sc.CoversDepartment(id) {
+			return ReportTarget{}, apperr.Forbidden("只能选择自己分管的部门（含子部门）。")
+		}
+		return ReportTarget{DepartmentID: id}, nil
+	case "user":
+		if id == selfID {
+			return ReportTarget{EmployeeID: selfID}, nil
+		}
+		u, err := db.One(c.DB, "SELECT id, department_id FROM users WHERE id = ?", id)
+		if err != nil {
+			return ReportTarget{}, err
+		}
+		if u == nil {
+			return ReportTarget{}, apperr.New("所选人员不存在。")
+		}
+		if isAdmin {
+			return ReportTarget{EmployeeID: id}, nil
+		}
+		if sc.IsSubordinate(id) {
+			return ReportTarget{EmployeeID: id}, nil
+		}
+		if containsID(sc.DeptIDs, u.Int("department_id")) {
+			// 分管部门的成员：只统计其在分管部门期间的台账。
+			restrict := sc
+			return ReportTarget{EmployeeID: id, Restrict: &restrict}, nil
+		}
+		return ReportTarget{}, apperr.Forbidden("只能选择自己的下属或分管部门的人员。")
 	}
-	return nil, nil
+	if isAdmin {
+		return ReportTarget{}, nil
+	}
+	return ReportTarget{EmployeeID: selfID}, nil
 }
 
-// reportVisibility 报告可见性：管理员全部；其他人看“本人为对象或本人生成”的；经理另可看本部门的。
+// TargetRecords 把报告统计对象换算成台账筛选条件（周报中心导出本周期台账用），
+// 结果与报告统计的记录范围一致，且不超出当前用户的可见范围。
+func (c *Core) TargetRecords(user Row, t ReportTarget, from, to string) (Scope, RecordFilter, error) {
+	sc, err := c.ScopeFor(user)
+	if err != nil {
+		return sc, RecordFilter{}, err
+	}
+	f := RecordFilter{From: from, To: to, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID}
+	if t.TeamLeaderID > 0 {
+		subs, err := subordinateIDs(c.DB, t.TeamLeaderID)
+		if err != nil {
+			return sc, f, err
+		}
+		f.CreatorIDs = append([]int64{t.TeamLeaderID}, subs...)
+	}
+	return sc, f, nil
+}
+
+// TargetOption 报告页“统计范围”下拉选项。
+type TargetOption struct {
+	Value string
+	Label string
+}
+
+// TargetGroup 下拉分组。
+type TargetGroup struct {
+	Label   string
+	Options []TargetOption
+}
+
+// ReportTargetOptions 报告页的统计范围选项；只有本人可选时返回 nil（页面不显示下拉）。
+func (c *Core) ReportTargetOptions(user Row) ([]TargetGroup, error) {
+	selfID := user.Int("id")
+	isAdmin := user.Str("role") == "admin"
+	sc, err := c.ScopeFor(user)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin && !sc.IsTeamScope() {
+		return nil, nil
+	}
+	common := TargetGroup{Label: "常用"}
+	if isAdmin {
+		common.Options = append(common.Options, TargetOption{"", "全公司"}, TargetOption{"self", "我本人"})
+	} else {
+		common.Options = append(common.Options, TargetOption{"", "我本人"})
+	}
+	if sc.HasSubordinates() {
+		common.Options = append(common.Options, TargetOption{"team", "我的团队（含全部下属）"})
+	}
+	groups := []TargetGroup{common}
+
+	all, err := departmentTree(c.DB)
+	if err != nil {
+		return nil, err
+	}
+	depts := TargetGroup{Label: "部门（含下级部门）"}
+	for _, d := range all {
+		if sc.CoversDepartment(d.Int("id")) {
+			depts.Options = append(depts.Options, TargetOption{"dept:" + strconv.FormatInt(d.Int("id"), 10), d.Str("label")})
+		}
+	}
+	if len(depts.Options) > 0 {
+		groups = append(groups, depts)
+	}
+
+	people, err := (&Users{Core: c}).EmployeeOptions(sc)
+	if err != nil {
+		return nil, err
+	}
+	persons := TargetGroup{Label: "人员"}
+	if !isAdmin {
+		persons.Label = "团队成员"
+	}
+	for _, p := range people {
+		if p.Int("id") == selfID {
+			continue
+		}
+		label := p.Str("name")
+		if no := p.Str("employee_no"); no != "" {
+			label += "（" + no + "）"
+		}
+		if dn := p.Str("department_name"); dn != "" {
+			label += " · " + dn
+		}
+		if !p.Bool("is_active") {
+			label += " · 已停用"
+		}
+		persons.Options = append(persons.Options, TargetOption{"user:" + strconv.FormatInt(p.Int("id"), 10), label})
+	}
+	if len(persons.Options) > 0 {
+		groups = append(groups, persons)
+	}
+	return groups, nil
+}
+
+// reportVisibility 报告可见性：管理员全部；其他人看“本人为对象或本人生成”的；
+// 领导另可看分管部门的、下属个人的、以及下属作为团队负责人的报告。
 func (c *Core) reportVisibility(user Row, alias string) (string, []any, error) {
 	if user.Str("role") == "admin" {
 		return "1 = 1", nil, nil
 	}
-	cond := "(" + alias + ".employee_id = ? OR " + alias + ".created_by = ?"
-	args := []any{user.Int("id"), user.Int("id")}
-	if user.Str("role") == "manager" {
-		sc, err := c.ScopeFor(user)
-		if err != nil {
-			return "", nil, err
+	cond := "(" + alias + ".employee_id = ? OR " + alias + ".created_by = ? OR " + alias + ".team_leader_id = ?"
+	args := []any{user.Int("id"), user.Int("id"), user.Int("id")}
+	sc, err := c.ScopeFor(user)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(sc.DeptIDs) > 0 {
+		cond += " OR " + alias + ".department_id IN (" + db.Placeholders(len(sc.DeptIDs)) + ")"
+		for _, id := range sc.DeptIDs {
+			args = append(args, id)
 		}
-		if len(sc.DeptIDs) > 0 {
-			cond += " OR " + alias + ".department_id IN (" + db.Placeholders(len(sc.DeptIDs)) + ")"
-			for _, id := range sc.DeptIDs {
+	}
+	if len(sc.UserIDs) > 0 {
+		ph := db.Placeholders(len(sc.UserIDs))
+		cond += " OR " + alias + ".employee_id IN (" + ph + ") OR " + alias + ".team_leader_id IN (" + ph + ")"
+		for i := 0; i < 2; i++ {
+			for _, id := range sc.UserIDs {
 				args = append(args, id)
 			}
 		}

@@ -302,7 +302,7 @@ func (s *WeeklyReports) Data(start, end string, t ReportTarget, includeChildren 
 	if err != nil {
 		return nil, err
 	}
-	d, err := collect(s.Core, collectSpec{Kind: KindWeekly, Start: start, End: end, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID, IncludeChildren: includeChildren, MaxRecords: maxRecords})
+	d, err := collect(s.Core, collectSpec{Kind: KindWeekly, Start: start, End: end, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID, TeamLeaderID: t.TeamLeaderID, Restrict: t.Restrict, IncludeChildren: includeChildren, MaxRecords: maxRecords})
 	if err != nil {
 		return nil, err
 	}
@@ -320,9 +320,9 @@ func (s *WeeklyReports) Generate(ctx context.Context, d *ReportData, style strin
 }
 
 func (s *WeeklyReports) Save(d *ReportData, content, source string, userID int64) (int64, error) {
-	return db.Insert(s.DB, `INSERT INTO weekly_reports (week_start, week_end, department_id, employee_id, scope_label, content, source, model, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.WeekStart, d.WeekEnd, ptrVal(d.Scope.DepartmentID), ptrVal(d.Scope.EmployeeID), d.Scope.Label,
-		content, source, s.AI.Model(), nullInt(userID), now())
+	return db.Insert(s.DB, `INSERT INTO weekly_reports (week_start, week_end, department_id, employee_id, scope_label, content, source, model, created_by, created_at, team_leader_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.WeekStart, d.WeekEnd, ptrVal(d.Scope.DepartmentID), ptrVal(d.Scope.EmployeeID), d.Scope.Label,
+		content, source, s.AI.Model(), nullInt(userID), now(), ptrVal(d.Scope.TeamLeaderID))
 }
 
 func (s *WeeklyReports) Find(user Row, id int64) (Row, error) {
@@ -347,7 +347,7 @@ func (s *AnnualReports) Data(year int, t ReportTarget, includeChildren bool, max
 		return nil, apperr.New("年度必须在 2000 到 2100 之间。")
 	}
 	start, end := fmt.Sprintf("%04d-01-01", year), fmt.Sprintf("%04d-12-31", year)
-	d, err := collect(s.Core, collectSpec{Kind: KindAnnual, Start: start, End: end, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID, IncludeChildren: includeChildren, MaxRecords: maxRecords})
+	d, err := collect(s.Core, collectSpec{Kind: KindAnnual, Start: start, End: end, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID, TeamLeaderID: t.TeamLeaderID, Restrict: t.Restrict, IncludeChildren: includeChildren, MaxRecords: maxRecords})
 	if err != nil {
 		return nil, err
 	}
@@ -365,9 +365,9 @@ func (s *AnnualReports) Generate(ctx context.Context, d *ReportData, style strin
 }
 
 func (s *AnnualReports) Save(d *ReportData, content, source string, userID int64) (int64, error) {
-	return db.Insert(s.DB, `INSERT INTO annual_reports (report_year, department_id, employee_id, scope_label, content, source, model, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.Year, ptrVal(d.Scope.DepartmentID), ptrVal(d.Scope.EmployeeID), d.Scope.Label,
-		content, source, s.AI.Model(), nullInt(userID), now())
+	return db.Insert(s.DB, `INSERT INTO annual_reports (report_year, department_id, employee_id, scope_label, content, source, model, created_by, created_at, team_leader_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.Year, ptrVal(d.Scope.DepartmentID), ptrVal(d.Scope.EmployeeID), d.Scope.Label,
+		content, source, s.AI.Model(), nullInt(userID), now(), ptrVal(d.Scope.TeamLeaderID))
 }
 
 func (s *AnnualReports) Find(user Row, id int64) (Row, error) {
@@ -431,7 +431,7 @@ func (s *PeriodReports) Data(start, end string, t ReportTarget, includeChildren 
 	if err != nil {
 		return nil, err
 	}
-	d, err := collect(s.Core, collectSpec{Kind: KindPeriod, Start: start, End: end, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID, IncludeChildren: includeChildren, MaxRecords: maxRecords})
+	d, err := collect(s.Core, collectSpec{Kind: KindPeriod, Start: start, End: end, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID, TeamLeaderID: t.TeamLeaderID, Restrict: t.Restrict, IncludeChildren: includeChildren, MaxRecords: maxRecords})
 	if err != nil {
 		return nil, err
 	}
@@ -450,9 +450,9 @@ func (s *PeriodReports) Generate(ctx context.Context, d *ReportData, style strin
 }
 
 func (s *PeriodReports) Save(d *ReportData, content, source string, userID int64) (int64, error) {
-	return db.Insert(s.DB, `INSERT INTO period_reports (start_date, end_date, period_label, department_id, employee_id, scope_label, content, source, model, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.StartDate, d.EndDate, d.Period.Label, ptrVal(d.Scope.DepartmentID), ptrVal(d.Scope.EmployeeID),
-		d.Scope.Label, content, source, s.AI.Model(), nullInt(userID), now())
+	return db.Insert(s.DB, `INSERT INTO period_reports (start_date, end_date, period_label, department_id, employee_id, scope_label, content, source, model, created_by, created_at, team_leader_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.StartDate, d.EndDate, d.Period.Label, ptrVal(d.Scope.DepartmentID), ptrVal(d.Scope.EmployeeID),
+		d.Scope.Label, content, source, s.AI.Model(), nullInt(userID), now(), ptrVal(d.Scope.TeamLeaderID))
 }
 
 func (s *PeriodReports) Find(user Row, id int64) (Row, error) {

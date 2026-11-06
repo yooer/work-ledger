@@ -20,9 +20,10 @@ type RecordFilter struct {
 	To           string
 	CategoryID   int64
 	ProjectID    int64
-	CreatorID    int64 // “我的台账”固定为本人
-	EmployeeID   int64 // 管理员/经理按记录人筛选
-	DepartmentID int64 // 按部门快照（含子部门）筛选
+	CreatorID    int64   // “我的台账”固定为本人
+	EmployeeID   int64   // 管理员/经理按记录人筛选
+	DepartmentID int64   // 按部门快照（含子部门）筛选
+	CreatorIDs   []int64 // 团队：记录人属于这些人（主管领导 + 全部下属）
 	Q            string
 }
 
@@ -65,6 +66,12 @@ func (s *Records) where(sc Scope, f RecordFilter) (string, []any, error) {
 	if f.EmployeeID > 0 {
 		conds = append(conds, "r.created_by = ?")
 		args = append(args, f.EmployeeID)
+	}
+	if len(f.CreatorIDs) > 0 {
+		conds = append(conds, "r.created_by IN ("+db.Placeholders(len(f.CreatorIDs))+")")
+		for _, id := range f.CreatorIDs {
+			args = append(args, id)
+		}
 	}
 	if f.DepartmentID > 0 {
 		ids, err := descendantIDs(s.DB, f.DepartmentID)
@@ -207,7 +214,7 @@ type RecordInput struct {
 	ParticipantIDs    []int64
 }
 
-// check 业务校验：分类/项目是否可用、参与人员是否存在且启用。existing 为编辑前的记录。
+// check 业务校验：分类/子分类是否可用、参与人员是否存在且启用。existing 为编辑前的记录。
 func (s *Records) check(in *RecordInput, existing Row) error {
 	fields := map[string]string{}
 	cat, err := db.One(s.DB, "SELECT * FROM work_categories WHERE id = ?", in.WorkCategoryID)
@@ -220,17 +227,28 @@ func (s *Records) check(in *RecordInput, existing Row) error {
 	} else if !cat.Bool("is_active") && (existing == nil || in.WorkCategoryID != curCat) {
 		fields["work_category_id"] = "所选工作分类已停用，请重新选择。"
 	}
-	if cat != nil && cat.Bool("is_customer_project") {
+	// 子分类规则：任何一级分类都可以有子分类；该分类下有启用的子分类时必须选择一个。
+	if cat != nil {
 		var proj Row
 		if in.ProjectCategoryID > 0 {
 			if proj, err = db.One(s.DB, "SELECT * FROM project_categories WHERE id = ?", in.ProjectCategoryID); err != nil {
 				return err
 			}
 		}
-		if proj == nil || proj.Int("work_category_id") != in.WorkCategoryID {
-			fields["project_category_id"] = "选择集客业务时，请选择对应的集客项目子分类。"
-		} else if !proj.Bool("is_active") && (existing == nil || in.ProjectCategoryID != curProj) {
-			fields["project_category_id"] = "所选集客项目子分类已停用，请重新选择。"
+		keepCurrent := existing != nil && in.ProjectCategoryID > 0 && in.ProjectCategoryID == curProj
+		switch {
+		case in.ProjectCategoryID > 0 && (proj == nil || proj.Int("work_category_id") != in.WorkCategoryID):
+			fields["project_category_id"] = "所选子分类不属于该工作分类，请重新选择。"
+		case proj != nil && !proj.Bool("is_active") && !keepCurrent:
+			fields["project_category_id"] = "所选子分类已停用，请重新选择。"
+		case proj == nil:
+			n, err := activeSubCount(s.DB, in.WorkCategoryID)
+			if err != nil {
+				return err
+			}
+			if n > 0 {
+				fields["project_category_id"] = "该工作分类下有子分类，请选择一个子分类。"
+			}
 		}
 	} else {
 		in.ProjectCategoryID = 0
@@ -297,14 +315,14 @@ func (s *Records) Create(user Row, in RecordInput) (int64, error) {
 	return id, err
 }
 
-// Update 编辑台账：只有管理员或创建者可以编辑；部门快照保持不变。
+// Update 编辑台账：管理员、创建者，或（设置允许时）所管辖的领导可以编辑；创建者与部门快照保持不变。
 func (s *Records) Update(sc Scope, user Row, id int64, in RecordInput) error {
 	existing, err := s.Find(sc, id)
 	if err != nil {
 		return err
 	}
-	if !CanEditRecord(existing, user) {
-		return apperr.Forbidden("你只能修改自己创建的工作记录。")
+	if !s.CanEditRecord(sc, existing, user) {
+		return apperr.Forbidden("你没有修改这条工作记录的权限。")
 	}
 	if err := s.check(&in, existing); err != nil {
 		return err
@@ -317,6 +335,11 @@ func (s *Records) Update(sc Scope, user Row, id int64, in RecordInput) error {
 		}
 		return replaceParticipants(tx, id, in.ParticipantIDs)
 	})
+}
+
+// activeSubCount 某一级分类下启用的子分类数量。
+func activeSubCount(q db.Q, categoryID int64) (int64, error) {
+	return db.Int(q, "SELECT COUNT(*) FROM project_categories WHERE work_category_id = ? AND is_active = 1", categoryID)
 }
 
 func replaceParticipants(tx db.Q, recordID int64, ids []int64) error {

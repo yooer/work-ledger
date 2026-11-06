@@ -78,7 +78,7 @@ var importAliases = []struct {
 	{"participants", []string{"参与人员", "参与人", "人员", "participants", "participant"}},
 	{"difficulty", []string{"难易度", "难度", "difficulty"}},
 	{"work_count", []string{"次数", "工作次数", "项目次数", "workcount", "count"}},
-	{"project", []string{"集客分类", "集客项目", "项目分类", "集客业务分类", "projectcategory", "project"}},
+	{"project", []string{"子分类", "二级分类", "集客分类", "集客项目", "项目分类", "集客业务分类", "projectcategory", "subcategory", "project"}},
 	{"creator", []string{"记录人", "记录创建者", "创建人", "创建者", "填报人", "录入人", "记录者", "员工姓名", "姓名", "creator", "createdby"}},
 	{"created_at", []string{"记录创建时间", "创建时间", "createdat", "createdatetime"}},
 	{"updated_at", []string{"最后编辑时间", "更新时间", "updatedat", "updatedatetime"}},
@@ -589,25 +589,31 @@ func (s *Importer) importRow(tx db.Q, row ImportRow, opt ImportOptions, defCreat
 		}
 	}
 	if projectName != "" && utf8.RuneCountInString(projectName) > 100 {
-		return false, rowFail("集客项目名称超过 100 个字符。")
+		return false, rowFail("子分类名称超过 100 个字符。")
 	}
 	cat, err := s.resolveCategory(tx, categoryName, projectName != "", opt.AutoCreateCategories, res)
 	if err != nil {
 		return false, err
 	}
 	var projectID *int64
-	if projectName != "" {
-		if !cat.Bool("is_customer_project") {
-			return false, rowFail("工作分类“%s”不是集客业务，不能填写集客项目。", categoryName)
+	needSub := false
+	if projectName == "" {
+		// 有启用子分类的分类必须带子分类（与网页填报一致）。
+		n, err := activeSubCount(tx, cat.Int("id"))
+		if err != nil {
+			return false, err
 		}
+		needSub = n > 0
+	}
+	if projectName != "" {
 		id, err := s.resolveProject(tx, cat.Int("id"), projectName, opt.AutoCreateCategories, res)
 		if err != nil {
 			return false, err
 		}
 		projectID = &id
-	} else if cat.Bool("is_customer_project") {
+	} else if needSub {
 		if !opt.AutoCreateCategories {
-			return false, rowFail("集客业务分类“%s”缺少集客项目。", categoryName)
+			return false, rowFail("工作分类“%s”下有子分类，该行缺少子分类。", categoryName)
 		}
 		id, err := s.resolveProject(tx, cat.Int("id"), "未分类（历史导入）", true, res)
 		if err != nil {
@@ -700,7 +706,7 @@ func (s *Importer) resolveProject(tx db.Q, categoryID int64, name string, autoCr
 		return p.Int("id"), nil
 	}
 	if !autoCreate {
-		return 0, rowFail("集客项目不存在：%s", name)
+		return 0, rowFail("子分类不存在：%s", name)
 	}
 	ts := now()
 	id, err := db.Insert(tx, "INSERT INTO project_categories (work_category_id, name, is_active, sort_order, created_at, updated_at) VALUES (?, ?, 1, 500, ?, ?)",

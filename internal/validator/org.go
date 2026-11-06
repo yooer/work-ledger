@@ -55,6 +55,7 @@ type UserInput struct {
 	EmployeeNo   string
 	Role         string
 	DepartmentID int64
+	SupervisorID int64
 	Phone        string
 	Email        string
 	IsActive     bool
@@ -70,6 +71,7 @@ func user(in Input, creating bool) (UserInput, *V) {
 		EmployeeNo:   v.Str("employee_no", "员工工号", 30),
 		Role:         v.OneOf("role", "角色", "employee", "admin", "manager", "employee"),
 		DepartmentID: v.ID("department_id"),
+		SupervisorID: v.ID("supervisor_id"),
 		Phone:        v.Str("phone", "联系电话", 30),
 		Email:        v.Str("email", "电子邮箱", 120),
 		IsActive:     v.Bool("is_active"),
@@ -86,6 +88,9 @@ func user(in Input, creating bool) (UserInput, *V) {
 	}
 	if creating {
 		passwordRule(v, "password", out.Password, "初始密码")
+	}
+	if out.ID > 0 && out.SupervisorID == out.ID {
+		v.Fail("supervisor_id", "主管领导不能是本人。")
 	}
 	return out, v
 }
@@ -149,7 +154,7 @@ func WorkCategory(in Input) (any, error) {
 	return out, v.Err()
 }
 
-// ProjectCategoryInput 集客项目子分类。
+// ProjectCategoryInput 子分类。
 type ProjectCategoryInput struct {
 	ID             int64
 	WorkCategoryID int64

@@ -22,13 +22,14 @@
     <div class="col-lg-4">
         <form data-ajax data-url="/reports/yearly/ajax" data-action="generate" novalidate>
             <input type="hidden" name="year" value="{{.Year}}">
-            <input type="hidden" name="department_id" value="{{.SelectedDept}}">
+            <input type="hidden" name="target" value="{{.TargetKey}}">
             {{template "report-generate" .}}
         </form>
         {{template "report-history" (dict "Items" .History "Base" "/reports/yearly")}}
     </div>
 </div>{{end}}
-{{define "scripts"}}<script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
+{{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
 <script src="{{asset "js/reports.js"}}"></script>
 <script>
 (function () {

@@ -5,10 +5,9 @@
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">平均难度 / 高难度</div><div class="wl-stat-value">{{$s.AvgDifficulty}}</div><div class="small text-secondary">4-5 级 {{$s.HighDifficultyRecords}} 条 · 集客 {{$s.CustomerProjectRecords}} 条</div></div></div></div>
 </div>{{end}}
 
-{{define "report-scope-select"}}{{if .Departments}}<div class="col-md-3"><label class="form-label">统计范围</label>
-    <select class="form-select" name="department_id">
-        {{if .IsAdmin}}<option value="0">全公司</option>{{else}}<option value="0">我本人</option>{{end}}
-        {{$sel := .SelectedDept}}{{range .Departments}}<option value="{{.id}}"{{if same .id $sel}} selected{{end}}>{{.label}}（含下级部门）</option>{{end}}
+{{define "report-scope-select"}}{{if .TargetGroups}}<div class="col-md-3"><label class="form-label">统计范围</label>
+    <select class="form-select" name="target" data-tom>
+        {{$sel := .TargetKey}}{{range .TargetGroups}}<optgroup label="{{.Label}}">{{range .Options}}<option value="{{.Value}}"{{if eq .Value $sel}} selected{{end}}>{{.Label}}</option>{{end}}</optgroup>{{end}}
     </select></div>{{end}}{{end}}
 
 {{define "report-generate"}}<div class="card mb-3">
@@ -35,9 +34,9 @@
         </tr>{{end}}</tbody></table></div>{{else}}<div class="card-body text-secondary">暂无数据。</div>{{end}}
 </div>
 {{if .ByProject}}<div class="card mb-3">
-    <div class="card-header"><h3 class="card-title">集客项目</h3></div>
+    <div class="card-header"><h3 class="card-title">子分类</h3></div>
     <div class="table-responsive"><table class="table table-vcenter card-table">
-        <thead><tr><th>项目</th><th class="text-end">记录</th><th class="text-end">次数</th></tr></thead>
+        <thead><tr><th>子分类</th><th class="text-end">记录</th><th class="text-end">次数</th></tr></thead>
         <tbody>{{range .ByProject}}<tr><td>{{.Project}}</td><td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td></tr>{{end}}</tbody></table></div>
 </div>{{end}}{{end}}
 

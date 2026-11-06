@@ -65,8 +65,8 @@ func (actions Actions) handler() HandlerFunc {
 				return apperr.Forbidden("该操作仅系统管理员可以执行。")
 			}
 		case AdminManager:
-			if !c.IsAdmin() && !c.IsManager() {
-				return apperr.Forbidden("该操作仅系统管理员或部门经理可以执行。")
+			if !c.IsAdmin() && !c.IsLeader() {
+				return apperr.Forbidden("该操作仅系统管理员、部门经理或主管领导可以执行。")
 			}
 		}
 

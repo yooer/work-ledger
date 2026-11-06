@@ -3,6 +3,7 @@ package controller
 import (
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"work-ledger/internal/apperr"
@@ -14,6 +15,7 @@ import (
 
 func (c *Controllers) registerReports(app *web.App) {
 	app.Page("/reports/weekly", web.Login, c.weeklyPage)
+	app.Page("/reports/weekly/export", web.Login, c.weeklyExport)
 	app.Page("/reports/weekly/{id}", web.Login, c.weeklyShow)
 	app.Ajax("/reports/weekly/ajax", web.Login, web.Actions{
 		"generate": {Validate: validator.WeeklyGenerate, Handle: c.weeklyGenerate},
@@ -32,7 +34,7 @@ func (c *Controllers) registerReports(app *web.App) {
 
 // reportCommon 三类报告页共用的数据。
 func (c *Controllers) reportCommon(ctx *web.Ctx, t service.ReportTarget, data *service.ReportData) (map[string]any, error) {
-	depts, err := c.S.Core.ReportDeptOptions(ctx.User)
+	groups, err := c.S.Core.ReportTargetOptions(ctx.User)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +43,7 @@ func (c *Controllers) reportCommon(ctx *web.Ctx, t service.ReportTarget, data *s
 		preview = preview[:12]
 	}
 	return map[string]any{
-		"Data": data, "Departments": depts, "SelectedDept": t.DepartmentID, "IsPersonal": t.EmployeeID > 0,
+		"Data": data, "TargetGroups": groups, "TargetKey": t.Key(ctx.UserID()), "IsPersonal": t.EmployeeID > 0,
 		"AIReady": c.S.AI.Configured(), "Preview": preview, "Styles": reportStyles,
 	}, nil
 }
@@ -65,7 +67,7 @@ func (c *Controllers) weeklyPage(ctx *web.Ctx) error {
 	if d := v.LenientDate("week_start"); d != "" {
 		start = c.S.Settings.StartOfCycleFor(d)
 	}
-	t, err := c.S.Core.ResolveTarget(ctx.User, v.ID("department_id"))
+	t, err := c.S.Core.ResolveTarget(ctx.User, validator.LenientTarget(ctx.Query(), "target"), v.ID("department_id"))
 	if err != nil {
 		return err
 	}
@@ -82,17 +84,25 @@ func (c *Controllers) weeklyPage(ctx *web.Ctx) error {
 		return err
 	}
 	q := url.Values{}
-	if t.DepartmentID > 0 {
-		q.Set("department_id", strconv.FormatInt(t.DepartmentID, 10))
+	if key := t.Key(ctx.UserID()); key != "" {
+		q.Set("target", key)
 	}
 	q.Set("week_start", timeutil.AddDays(start, -7))
 	prevURL := "/reports/weekly?" + q.Encode()
 	q.Set("week_start", timeutil.AddDays(start, 7))
 	nextURL := "/reports/weekly?" + q.Encode()
+	// 导出本周期台账（与当前统计范围一致）：完整地址在后端拼好，避免模板转义查询串。
+	exportURLs := map[string]string{}
+	for _, format := range []string{"xlsx", "csv"} {
+		q.Set("week_start", start)
+		q.Set("format", format)
+		exportURLs[format] = "/reports/weekly/export?" + q.Encode()
+	}
 	view["PageTitle"], view["Active"] = "周报中心", "reports"
 	view["WeekStart"], view["WeekEnd"] = start, service.WeekEndFor(start)
 	view["CycleLabel"] = c.S.Settings.WeekCycleLabel()
 	view["History"], view["PrevURL"], view["NextURL"] = history, prevURL, nextURL
+	view["ExportURLs"] = exportURLs
 	view["Chart"] = map[string]any{"days": data.Summary.ByDay, "categories": data.Summary.ByCategory}
 	return ctx.Render("reports/weekly", view)
 }
@@ -102,7 +112,7 @@ func (c *Controllers) weeklyGenerate(ctx *web.Ctx, in any) (any, error) {
 	if err := c.requireAI(); err != nil {
 		return nil, err
 	}
-	t, err := c.S.Core.ResolveTarget(ctx.User, p.DepartmentID)
+	t, err := c.S.Core.ResolveTarget(ctx.User, p.Target, p.DepartmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +131,36 @@ func (c *Controllers) weeklyGenerate(ctx *web.Ctx, in any) (any, error) {
 		return nil, err
 	}
 	return web.Result{Message: "周工作总结已生成并保存。", Redirect: "/reports/weekly/" + strconv.FormatInt(id, 10), FlashOnRedirect: true}, nil
+}
+
+// weeklyExport 导出周报中心当前周期、当前统计范围的台账（文件下载例外：GET）。
+func (c *Controllers) weeklyExport(ctx *web.Ctx) error {
+	p, err := validator.WeeklyExport(ctx.Query())
+	if err != nil {
+		return err
+	}
+	t, err := c.S.Core.ResolveTarget(ctx.User, p.Target, p.DepartmentID)
+	if err != nil {
+		return err
+	}
+	start := c.S.Settings.StartOfCycleFor(p.WeekStart)
+	end := service.WeekEndFor(start)
+	sc, f, err := c.S.Core.TargetRecords(ctx.User, t, start, end)
+	if err != nil {
+		return err
+	}
+	meta := map[string]any{"scope": "weekly", "week_start": start, "week_end": end, "target": t.Key(ctx.UserID())}
+	file, err := c.S.Export.Export(sc, f, p.Format, meta)
+	if err != nil {
+		return err
+	}
+	file.Name = "weekly-records-" + start + "-" + end + file.Name[strings.LastIndex(file.Name, "."):]
+	if file.Truncated {
+		ctx.W.Header().Set("X-Export-Truncated", "1")
+	} else {
+		ctx.W.Header().Set("X-Export-Truncated", "0")
+	}
+	return ctx.Download(file.Name, file.ContentType, file.Body)
 }
 
 func (c *Controllers) weeklyShow(ctx *web.Ctx) error {
@@ -142,7 +182,7 @@ func (c *Controllers) yearlyPage(ctx *web.Ctx) error {
 	if year < 2000 || year > 2100 {
 		year = timeutil.Year()
 	}
-	t, err := c.S.Core.ResolveTarget(ctx.User, v.ID("department_id"))
+	t, err := c.S.Core.ResolveTarget(ctx.User, validator.LenientTarget(ctx.Query(), "target"), v.ID("department_id"))
 	if err != nil {
 		return err
 	}
@@ -173,7 +213,7 @@ func (c *Controllers) yearlyGenerate(ctx *web.Ctx, in any) (any, error) {
 	if err := c.requireAI(); err != nil {
 		return nil, err
 	}
-	t, err := c.S.Core.ResolveTarget(ctx.User, p.DepartmentID)
+	t, err := c.S.Core.ResolveTarget(ctx.User, p.Target, p.DepartmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +256,7 @@ func (c *Controllers) periodPage(ctx *web.Ctx) error {
 	if end == "" {
 		end = time.Date(n.Year(), n.Month()+1, 0, 0, 0, 0, 0, timeutil.Location()).Format(timeutil.Date)
 	}
-	t, err := c.S.Core.ResolveTarget(ctx.User, v.ID("department_id"))
+	t, err := c.S.Core.ResolveTarget(ctx.User, validator.LenientTarget(ctx.Query(), "target"), v.ID("department_id"))
 	if err != nil {
 		return err
 	}
@@ -250,7 +290,7 @@ func (c *Controllers) periodGenerate(ctx *web.Ctx, in any) (any, error) {
 	if err := c.requireAI(); err != nil {
 		return nil, err
 	}
-	t, err := c.S.Core.ResolveTarget(ctx.User, p.DepartmentID)
+	t, err := c.S.Core.ResolveTarget(ctx.User, p.Target, p.DepartmentID)
 	if err != nil {
 		return nil, err
 	}

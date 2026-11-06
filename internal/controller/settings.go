@@ -9,8 +9,9 @@ import (
 func (c *Controllers) registerSettings(app *web.App) {
 	app.Page("/settings", web.Admin, c.settingsPage)
 	app.Ajax("/settings/ajax", web.Admin, web.Actions{
-		"save_week_cycle": {Validate: validator.WeekCycle, Handle: c.saveWeekCycle},
-		"save_auto":       {Validate: validator.AutoReport, Handle: c.saveAuto},
+		"save_week_cycle":  {Validate: validator.WeekCycle, Handle: c.saveWeekCycle},
+		"save_auto":        {Validate: validator.AutoReport, Handle: c.saveAuto},
+		"save_permissions": {Validate: validator.Permissions, Handle: c.savePermissions},
 	})
 }
 
@@ -26,7 +27,7 @@ func (c *Controllers) settingsPage(ctx *web.Ctx) error {
 		"AIBaseURL": cfg.AI.BaseURL, "AIModel": cfg.AI.Model, "AppURL": cfg.App.URL, "Timezone": cfg.App.Timezone,
 		"ListenAddr": cfg.App.ListenAddr, "Home": cfg.Paths.Home, "EnvFile": cfg.Paths.EnvFile, "DBPath": cfg.DB.SQLitePath,
 		"WeekStart": c.S.Settings.WeekStartDay(), "WeekEnd": c.S.Settings.WeekEndDay(), "CycleLabel": c.S.Settings.WeekCycleLabel(),
-		"Counts": counts, "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
+		"Counts": counts, "LeaderCanEdit": c.S.Settings.LeaderCanEdit(), "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
 	})
 }
 
@@ -36,6 +37,18 @@ func (c *Controllers) saveWeekCycle(ctx *web.Ctx, in any) (any, error) {
 		return nil, err
 	}
 	return web.Result{Message: "周报统计周期已更新为：" + c.S.Settings.WeekCycleLabel() + "。", Redirect: "/settings", FlashOnRedirect: true}, nil
+}
+
+func (c *Controllers) savePermissions(ctx *web.Ctx, in any) (any, error) {
+	p := in.(validator.PermissionsInput)
+	if err := c.S.Settings.SetLeaderCanEdit(p.LeaderCanEdit); err != nil {
+		return nil, err
+	}
+	msg := "已关闭：领导只能查看、导出和生成总结。"
+	if p.LeaderCanEdit {
+		msg = "已开启：主管领导和部门经理可以修改下属台账。"
+	}
+	return web.Result{Message: msg, Redirect: "/settings", FlashOnRedirect: true}, nil
 }
 
 func (c *Controllers) saveAuto(ctx *web.Ctx, in any) (any, error) {

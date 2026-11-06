@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -150,22 +151,261 @@ func TestManagerScopeAndEditRules(t *testing.T) {
 	if own.Total != 1 {
 		t.Fatalf("employee sees %d", own.Total)
 	}
-	// 经理不能编辑他人记录
+	// 经理编辑本部门他人记录：默认允许（领导可修改下属台账开关默认开启）
 	other := res.Items[0]
 	if other.Int("created_by") == manager.Int("id") {
 		other = res.Items[1]
 	}
-	err = s.Records.Update(sc, manager, other.Int("id"), RecordInput{WorkCategoryID: 2, Content: "改别人的", WorkAt: "2026-10-27 10:00:00", Difficulty: 3, WorkCount: 1, ParticipantIDs: []int64{manager.Int("id")}})
+	edit := RecordInput{WorkCategoryID: 2, Content: "经理修正", WorkAt: "2026-10-27 10:00:00", Difficulty: 3, WorkCount: 1, ParticipantIDs: []int64{manager.Int("id")}}
+	if err := s.Records.Update(sc, manager, other.Int("id"), edit); err != nil {
+		t.Fatalf("manager edit with switch on: %v", err)
+	}
+	after, _ := s.Records.Find(sc, other.Int("id"))
+	if after.Int("created_by") != other.Int("created_by") || after.Int("updated_by") != manager.Int("id") {
+		t.Fatalf("creator must stay, editor must be manager: %v / %v", after["created_by"], after["updated_by"])
+	}
+	// 关闭开关后 → 403
+	if err := s.Settings.SetLeaderCanEdit(false); err != nil {
+		t.Fatal(err)
+	}
+	err = s.Records.Update(sc, manager, other.Int("id"), edit)
 	if e, ok := apperr.As(err); !ok || e.Status != 403 {
-		t.Fatalf("expected 403, got %v", err)
+		t.Fatalf("expected 403 with switch off, got %v", err)
 	}
 	// 员工查看他人记录 → 404
 	if _, err := s.Records.Find(wsc, other.Int("id")); err == nil {
 		t.Fatal("employee should not see others' record")
 	}
 	// 生成范围：经理只能选择本部门
-	if _, err := s.Core.ResolveTarget(manager, wangwu.Int("department_id")); err == nil {
+	if _, err := s.Core.ResolveTarget(manager, "", wangwu.Int("department_id")); err == nil {
 		t.Fatal("manager should not target other department")
+	}
+	if _, err := s.Core.ResolveTarget(manager, "dept:"+fmt.Sprint(wangwu.Int("department_id")), 0); err == nil {
+		t.Fatal("manager should not target other department via target key")
+	}
+	if _, err := s.Core.ResolveTarget(manager, "user:"+fmt.Sprint(wangwu.Int("id")), 0); err == nil {
+		t.Fatal("manager should not target a person outside team")
+	}
+}
+
+func setSupervisor(t *testing.T, s *Services, username string, supervisor Row) {
+	t.Helper()
+	u := userByName(t, s, username)
+	in := UserInput{Username: u.Str("username"), Name: u.Str("name"), EmployeeNo: u.Str("employee_no"), Role: u.Str("role"),
+		DepartmentID: u.Int("department_id"), IsActive: true}
+	if supervisor != nil {
+		in.SupervisorID = supervisor.Int("id")
+	}
+	admin := userByName(t, s, "admin")
+	if err := s.Users.Update(admin.Int("id"), u.Int("id"), in); err != nil {
+		t.Fatalf("set supervisor of %s: %v", username, err)
+	}
+}
+
+func TestSupervisorScopeTeamReportsAndExport(t *testing.T) {
+	s, _ := newTestServices(t)
+	wangwu := userByName(t, s, "wangwu") // 运维一组，1 条台账
+	zhangsan := userByName(t, s, "zhangsan")
+	lisi := userByName(t, s, "lisi")
+	// 跨部门：张三向王五汇报，李四向张三汇报（王五的间接下属）
+	setSupervisor(t, s, "zhangsan", wangwu)
+	setSupervisor(t, s, "lisi", zhangsan)
+	wangwu = userByName(t, s, "wangwu")
+	if !wangwu.Bool("has_subordinates") {
+		t.Fatal("has_subordinates should be true")
+	}
+	sc, err := s.Core.ScopeFor(wangwu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sc.UserIDs) != 2 || !sc.IsTeamScope() {
+		t.Fatalf("subordinates = %v", sc.UserIDs)
+	}
+	res, _ := s.Records.List(sc, RecordFilter{}, 1, 50)
+	if res.Total != 5 { // 王五 1 + 张三 2 + 李四 2
+		t.Fatalf("supervisor sees %d", res.Total)
+	}
+	// 循环汇报被拒绝：王五的主管不能设为李四（王五的间接下属）
+	u := userByName(t, s, "wangwu")
+	admin := userByName(t, s, "admin")
+	err = s.Users.Update(admin.Int("id"), u.Int("id"), UserInput{Username: u.Str("username"), Name: u.Str("name"), EmployeeNo: u.Str("employee_no"),
+		Role: u.Str("role"), DepartmentID: u.Int("department_id"), IsActive: true, SupervisorID: lisi.Int("id")})
+	if e, ok := apperr.As(err); !ok || e.Fields["supervisor_id"] == "" {
+		t.Fatalf("expected cycle rejection, got %v", err)
+	}
+	// 主管可以修改下属台账（开关默认开启）
+	var lisiRec Row
+	for _, r := range res.Items {
+		if r.Int("created_by") == lisi.Int("id") {
+			lisiRec = r
+		}
+	}
+	if !s.Records.CanEditRecord(sc, lisiRec, wangwu) {
+		t.Fatal("supervisor should edit indirect subordinate's record")
+	}
+	// 团队周报：范围 = 王五 + 全部下属
+	tgt, err := s.Core.ResolveTarget(wangwu, "team", 0)
+	if err != nil || tgt.TeamLeaderID != wangwu.Int("id") {
+		t.Fatalf("team target: %+v %v", tgt, err)
+	}
+	data, err := s.Weekly.Data("2026-10-26", "2026-11-01", tgt, true, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Summary.RecordCount != 5 || !strings.Contains(data.Scope.Label, "团队") {
+		t.Fatalf("team weekly: %d %q", data.Summary.RecordCount, data.Scope.Label)
+	}
+	id, err := s.Weekly.Save(data, "# 团队周报", "ai", wangwu.Int("id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 张三（团队成员之一，也是李四的主管）看不到上级的团队周报；管理员可以
+	if _, err := s.Weekly.Find(userByName(t, s, "zhangsan"), id); err == nil {
+		t.Fatal("subordinate should not see leader's team report")
+	}
+	if _, err := s.Weekly.Find(admin, id); err != nil {
+		t.Fatal(err)
+	}
+	// 选择单个下属
+	if _, err := s.Core.ResolveTarget(wangwu, "user:"+fmt.Sprint(lisi.Int("id")), 0); err != nil {
+		t.Fatalf("supervisor should target indirect subordinate: %v", err)
+	}
+	// 周报中心导出：记录范围与周报统计一致
+	esc, f, err := s.Core.TargetRecords(wangwu, tgt, "2026-10-26", "2026-11-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, _, err := s.Records.ExportRows(esc, f, 1000)
+	if err != nil || len(rows) != 5 {
+		t.Fatalf("export rows = %d %v", len(rows), err)
+	}
+	// 下拉选项含“我的团队”与两名下属
+	groups, err := s.Core.ReportTargetOptions(wangwu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, g := range groups {
+		for _, o := range g.Options {
+			if o.Value == "team" || strings.HasPrefix(o.Value, "user:") {
+				n++
+			}
+		}
+	}
+	if n != 3 {
+		t.Fatalf("target options = %+v", groups)
+	}
+	// 员工（无下属）不能选团队
+	if _, err := s.Core.ResolveTarget(userByName(t, s, "lisi"), "team", 0); err == nil {
+		t.Fatal("employee without subordinates should not target team")
+	}
+}
+
+func TestOrgChart(t *testing.T) {
+	s, _ := newTestServices(t)
+	wangwu := userByName(t, s, "wangwu")
+	setSupervisor(t, s, "zhangsan", wangwu)
+	setSupervisor(t, s, "lisi", userByName(t, s, "zhangsan"))
+	trees, unassigned, err := s.Users.OrgChart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trees) != 1 || trees[0].Name != wangwu.Str("name") || trees[0].TeamSize != 2 || len(trees[0].Children) != 1 || len(trees[0].Children[0].Children) != 1 {
+		t.Fatalf("trees = %+v", trees)
+	}
+	if len(unassigned) != 2 { // admin、经理
+		t.Fatalf("unassigned = %d", len(unassigned))
+	}
+	// 数据异常形成环时不会死循环
+	if _, err := s.Core.DB.Exec("UPDATE users SET supervisor_id = ? WHERE id = ?", userByName(t, s, "lisi").Int("id"), wangwu.Int("id")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Users.OrgChart(); err != nil {
+		t.Fatal(err)
+	}
+	if ids, err := subordinateIDs(s.Core.DB, wangwu.Int("id")); err != nil || len(ids) != 2 {
+		t.Fatalf("cyclic subordinates = %v %v", ids, err)
+	}
+}
+
+func TestClearData(t *testing.T) {
+	s, _ := newTestServices(t)
+	admin := userByName(t, s, "admin")
+	if _, err := s.Backup.ClearData(admin, "wrong", ClearOptions{Categories: true, Reports: true}); err == nil {
+		t.Fatal("wrong password accepted")
+	}
+	if _, err := s.Backup.ClearData(userByName(t, s, "manager"), "x", ClearOptions{}); err == nil {
+		t.Fatal("non-admin allowed")
+	}
+	// 只清台账、保留分类
+	res, err := s.Backup.ClearData(admin, "Admin12345", ClearOptions{Categories: false, Reports: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Deleted["work_records"] != 6 || res.Snapshot == "" {
+		t.Fatalf("clear result = %+v", res)
+	}
+	counts, _ := s.Backup.Counts()
+	if counts["work_records"] != 0 || counts["work_record_participants"] != 0 || counts["work_categories"] == 0 || counts["users"] == 0 || counts["departments"] == 0 {
+		t.Fatalf("counts after clear = %v", counts)
+	}
+	// 清空分类
+	if _, err := s.Backup.ClearData(admin, "Admin12345", ClearOptions{Categories: true, Reports: true}); err != nil {
+		t.Fatal(err)
+	}
+	counts, _ = s.Backup.Counts()
+	if counts["work_categories"] != 0 || counts["project_categories"] != 0 || counts["app_settings"] == 0 {
+		t.Fatalf("counts after full clear = %v", counts)
+	}
+	// 清空前备份可以恢复
+	p, err := s.Backup.LocalPath(res.Snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	data, err := s.Backup.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Backup.Restore(data); err != nil {
+		t.Fatal(err)
+	}
+	counts, _ = s.Backup.Counts()
+	if counts["work_records"] != 6 {
+		t.Fatalf("restored records = %d", counts["work_records"])
+	}
+}
+
+func TestSubcategoryForAnyCategory(t *testing.T) {
+	s, _ := newTestServices(t)
+	admin := userByName(t, s, "admin")
+	// 非集客分类“日常维护”（id 2）新建子分类
+	if _, err := s.Categories.SaveProject(ProjectInput{WorkCategoryID: 2, Name: "机房巡检", IsActive: true}); err != nil {
+		t.Fatal(err)
+	}
+	pid, _ := db.Int(s.Core.DB, "SELECT id FROM project_categories WHERE work_category_id = 2 AND name = '机房巡检'")
+	base := RecordInput{WorkCategoryID: 2, Content: "巡检", WorkAt: "2026-11-01 09:00:00", Difficulty: 2, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}}
+	if _, err := s.Records.Create(admin, base); err == nil {
+		t.Fatal("subcategory should be required when category has subcategories")
+	}
+	base.ProjectCategoryID = pid
+	id, err := s.Records.Create(admin, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, _ := s.Core.ScopeFor(admin)
+	rec, _ := s.Records.Find(sc, id)
+	if rec.Int("project_category_id") != pid {
+		t.Fatal("subcategory not saved")
+	}
+	// 没有子分类的分类不需要选
+	if _, err := s.Records.Create(admin, RecordInput{WorkCategoryID: 3, Content: "例会", WorkAt: "2026-11-01 10:00:00", Difficulty: 1, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}}); err != nil {
+		t.Fatal(err)
+	}
+	// 子分类必须属于所选分类
+	base.ProjectCategoryID = 1 // 集客业务的子分类
+	if _, err := s.Records.Create(admin, base); err == nil {
+		t.Fatal("foreign subcategory accepted")
 	}
 }
 
@@ -174,16 +414,12 @@ func TestRecordBusinessValidation(t *testing.T) {
 	admin := userByName(t, s, "admin")
 	_, err := s.Records.Create(admin, RecordInput{WorkCategoryID: 1, Content: "集客缺项目", WorkAt: "2026-11-01 09:00:00", Difficulty: 3, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}})
 	if e, ok := apperr.As(err); !ok || e.Fields["project_category_id"] == "" {
-		t.Fatalf("expected project validation, got %v", err)
+		t.Fatalf("expected subcategory validation, got %v", err)
 	}
-	id, err := s.Records.Create(admin, RecordInput{WorkCategoryID: 2, ProjectCategoryID: 3, Content: "日常巡检", WorkAt: "2026-11-01 09:00:00", Difficulty: 2, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sc, _ := s.Core.ScopeFor(admin)
-	rec, _ := s.Records.Find(sc, id)
-	if !rec.Null("project_category_id") {
-		t.Fatal("non-customer category should drop project")
+	// 子分类 3 属于“集客业务”，不能挂到“日常维护”
+	_, err = s.Records.Create(admin, RecordInput{WorkCategoryID: 2, ProjectCategoryID: 3, Content: "日常巡检", WorkAt: "2026-11-01 09:00:00", Difficulty: 2, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}})
+	if e, ok := apperr.As(err); !ok || e.Fields["project_category_id"] == "" {
+		t.Fatalf("expected foreign subcategory rejection, got %v", err)
 	}
 }
 
@@ -387,5 +623,37 @@ func TestSchedulerAutoWeeklyOnce(t *testing.T) {
 	}
 	if st := sch.LastStatus(); st == nil || !st.OK {
 		t.Fatalf("status = %+v", st)
+	}
+}
+
+func TestBackupRoundTripWithSupervisorsAndTeamReports(t *testing.T) {
+	s, _ := newTestServices(t)
+	wangwu := userByName(t, s, "wangwu") // id 比张三大：恢复时需两阶段写入主管关系
+	setSupervisor(t, s, "zhangsan", wangwu)
+	tgt, _ := s.Core.ResolveTarget(userByName(t, s, "wangwu"), "team", 0)
+	d, _ := s.Weekly.Data("2026-10-26", "2026-11-01", tgt, true, 100)
+	if _, err := s.Weekly.Save(d, "团队", "ai", wangwu.Int("id")); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := s.Backup.ExportJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"supervisor_id":`+fmt.Sprint(wangwu.Int("id"))) || !strings.Contains(string(raw), `"team_leader_id":`) {
+		t.Fatal("backup should include supervisor_id and team_leader_id")
+	}
+	data, err := s.Backup.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Backup.Restore(data); err != nil {
+		t.Fatal(err)
+	}
+	if got := userByName(t, s, "zhangsan").Int("supervisor_id"); got != wangwu.Int("id") {
+		t.Fatalf("supervisor after restore = %d", got)
+	}
+	n, _ := db.Int(s.Core.DB, "SELECT COUNT(*) FROM weekly_reports WHERE team_leader_id = ?", wangwu.Int("id"))
+	if n != 1 {
+		t.Fatalf("team report after restore = %d", n)
 	}
 }

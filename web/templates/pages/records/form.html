@@ -13,14 +13,14 @@
                     <label class="form-label required" for="r-cat">工作分类</label>
                     <select class="form-select" id="r-cat" name="work_category_id" data-category-select required>
                         <option value="">请选择工作分类</option>
-                        {{range .Categories}}<option value="{{.id}}" data-customer="{{.is_customer_project}}"{{if same .id $o.work_category_id}} selected{{end}}>{{.name}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+                        {{range .Categories}}<option value="{{.id}}"{{if same .id $o.work_category_id}} selected{{end}}>{{.name}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
                     </select>
-                    <div class="form-hint">选择“集客业务”时需要填写具体项目子分类。</div>
+                    <div class="form-hint">分类下有子分类时，需要再选择一个子分类。</div>
                 </div>
                 <div class="col-md-6 mb-3" data-project-field>
-                    <label class="form-label required" for="r-proj">集客项目子分类</label>
+                    <label class="form-label required" for="r-proj">子分类</label>
                     <select class="form-select" id="r-proj" name="project_category_id" data-project-select>
-                        <option value="">请选择集客项目</option>
+                        <option value="">请选择子分类</option>
                         {{range .Projects}}<option value="{{.id}}" data-work-category="{{.work_category_id}}"{{if same .id $o.project_category_id}} selected{{end}}>{{.name}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
                     </select>
                     <div class="form-hint">子分类可由管理员维护，但不会被删除。</div>
@@ -99,20 +99,19 @@
     var cat = document.querySelector('[data-category-select]');
     var field = document.querySelector('[data-project-field]');
     var proj = document.querySelector('[data-project-select]');
+    // 任何一级分类都可以有子分类：所选分类下有子分类时显示并要求选择。
     function apply(reset) {
-        var opt = cat.options[cat.selectedIndex];
-        var isCustomer = opt && opt.dataset.customer === '1';
-        field.classList.toggle('d-none', !isCustomer);
+        var hasSub = false;
         Array.from(proj.options).forEach(function (o) {
             if (!o.value) return;
-            var match = o.dataset.workCategory === cat.value;
+            var match = cat.value !== '' && o.dataset.workCategory === cat.value;
             o.hidden = !match;
             o.disabled = !match;
+            if (match) hasSub = true;
         });
-        if (reset || !isCustomer) {
-            var sel = proj.options[proj.selectedIndex];
-            if (!isCustomer || (sel && sel.disabled)) proj.value = '';
-        }
+        field.classList.toggle('d-none', !hasSub);
+        var sel = proj.options[proj.selectedIndex];
+        if (!hasSub || (sel && sel.disabled) || (reset && sel && sel.dataset.workCategory !== cat.value)) proj.value = '';
     }
     cat.addEventListener('change', function () { apply(true); });
     apply(false);

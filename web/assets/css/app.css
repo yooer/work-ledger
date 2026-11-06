@@ -69,3 +69,21 @@
     .navbar-vertical, .page-header, .footer, .wl-no-print { display: none !important; }
     .page-wrapper { margin: 0 !important; }
 }
+
+/* tom-select 单选：长选项不换行，超出部分省略 */
+.ts-wrapper.single .ts-control {
+    flex-wrap: nowrap;
+}
+
+.ts-wrapper.single .ts-control > .item {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 已选中时搜索框不再占 7rem 宽度，把空间留给选中项 */
+.ts-wrapper.single.has-items .ts-control > input {
+    flex: 0 1 0;
+    min-width: 0;
+}

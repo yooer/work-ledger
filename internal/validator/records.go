@@ -108,6 +108,28 @@ func ImportOptions(in Input) (any, error) {
 // RestoreInput 恢复确认（文件本身在 controller 中检查）。
 type RestoreInput struct{}
 
+// ClearDataInput 一键清空参数。
+type ClearDataInput struct {
+	Password   string
+	Categories bool
+	Reports    bool
+}
+
+// ClearConfirmText 一键清空需要手动输入的确认文字。
+const ClearConfirmText = "确认清空"
+
+func ClearData(in Input) (any, error) {
+	v := New(in)
+	out := ClearDataInput{Password: v.RawKeep("password"), Categories: v.Bool("clear_categories"), Reports: v.Bool("clear_reports")}
+	if out.Password == "" {
+		v.Fail("password", "请输入当前管理员的登录密码。")
+	}
+	if v.Raw("confirm_text") != ClearConfirmText {
+		v.Fail("confirm_text", "请输入“"+ClearConfirmText+"”四个字以确认。")
+	}
+	return out, v.Err()
+}
+
 func Restore(in Input) (any, error) {
 	v := New(in)
 	if !v.Bool("confirm_restore") {

@@ -20,6 +20,7 @@ func (c *Controllers) registerBackup(app *web.App) {
 	app.Ajax("/backup/ajax", web.Admin, web.Actions{
 		"snapshot": {Validate: validator.None, Handle: c.backupSnapshot},
 		"restore":  {Validate: validator.Restore, Handle: c.backupRestore, Multipart: true},
+		"clear":    {Validate: validator.ClearData, Handle: c.clearData},
 	})
 }
 
@@ -77,6 +78,25 @@ func (c *Controllers) backupSnapshot(ctx *web.Ctx, _ any) (any, error) {
 		return nil, err
 	}
 	return web.Result{Message: "本地快照已创建：" + name + "（" + service.HumanSize(int64(size)) + "）。", Redirect: "/backup", FlashOnRedirect: true}, nil
+}
+
+// clearData 一键清空台账数据（清空前自动备份，需管理员密码 + 确认文字）。
+func (c *Controllers) clearData(ctx *web.Ctx, in any) (any, error) {
+	p := in.(validator.ClearDataInput)
+	res, err := c.S.Backup.ClearData(ctx.User, p.Password, service.ClearOptions{Categories: p.Categories, Reports: p.Reports})
+	if err != nil {
+		return nil, err
+	}
+	c.S.Core.Log.Warn("business data cleared", "by", ctx.UserID(), "snapshot", res.Snapshot, "deleted", res.Deleted)
+	msg := "已清空工作记录 " + strconv.FormatInt(res.Deleted["work_records"], 10) + " 条"
+	if p.Reports {
+		msg += "、已生成总结 " + strconv.FormatInt(res.Deleted["weekly_reports"]+res.Deleted["annual_reports"]+res.Deleted["period_reports"], 10) + " 份"
+	}
+	if p.Categories {
+		msg += "、工作分类 " + strconv.FormatInt(res.Deleted["work_categories"], 10) + " 个、子分类 " + strconv.FormatInt(res.Deleted["project_categories"], 10) + " 个"
+	}
+	msg += "。清空前备份：" + res.Snapshot + "（可在下方本地快照中下载，或用“从备份恢复”找回）。"
+	return web.Result{Message: msg, Redirect: "/backup", FlashOnRedirect: true}, nil
 }
 
 // backupRestore 覆盖恢复：校验 → 恢复前安全快照 → 事务恢复 → 清空全部会话并要求重新登录。

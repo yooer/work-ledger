@@ -1,6 +1,7 @@
 package server
 
 import (
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -103,7 +104,7 @@ func TestAjaxConventions(t *testing.T) {
 	if code, body := c.post("/auth/ajax", "application/json", `{"action":"login","username":"admin","password":"Admin12345"}`, true); code != 200 || !strings.Contains(body, `"redirect":"/"`) {
 		t.Fatalf("login: %d %s", code, body)
 	}
-	for _, p := range []string{"/", "/records", "/my-records", "/records/create", "/people", "/departments", "/categories", "/reports/weekly", "/reports/yearly", "/reports/period", "/settings", "/backup", "/records/import", "/security", "/password"} {
+	for _, p := range []string{"/", "/records", "/my-records", "/records/create", "/people", "/departments", "/categories", "/reports/weekly", "/reports/yearly", "/reports/period", "/settings", "/backup", "/records/import", "/security", "/password", "/org-chart", "/team-records", "/people/3/edit"} {
 		if code, body := c.get(p); code != 200 {
 			t.Errorf("GET %s = %d %.200s", p, code, body)
 		}
@@ -119,7 +120,7 @@ func TestPermissionsAndAPI(t *testing.T) {
 	c.get("/login")
 	c.post("/auth/ajax", "application/json", `{"action":"login","username":"wangwu","password":"`+demo+`"}`, true)
 	c.get("/")
-	for p, want := range map[string]int{"/records": 403, "/people": 403, "/backup": 403, "/department-records": 403, "/my-records": 200} {
+	for p, want := range map[string]int{"/records": 403, "/people": 403, "/backup": 403, "/team-records": 403, "/org-chart": 403, "/my-records": 200} {
 		if code, _ := c.get(p); code != want {
 			t.Errorf("employee GET %s = %d, want %d", p, code, want)
 		}
@@ -141,5 +142,114 @@ func TestPermissionsAndAPI(t *testing.T) {
 	resp, _ = http.Get(srv.URL + "/assets/libs/tabler/css/tabler.min.css")
 	if resp.StatusCode != 200 {
 		t.Errorf("static asset = %d", resp.StatusCode)
+	}
+}
+
+func login(t *testing.T, srv *httptest.Server, user, pass string) *client {
+	c := newClient(t, srv.URL)
+	c.get("/login")
+	if code, body := c.post("/auth/ajax", "application/json", `{"action":"login","username":"`+user+`","password":"`+pass+`"}`, true); code != 200 {
+		t.Fatalf("login %s: %d %s", user, code, body)
+	}
+	c.get("/")
+	return c
+}
+
+var hrefRe = regexp.MustCompile(`href="(/(?:records|reports/weekly)/export\?[^"]+)"`)
+
+// exportLinks 从页面中取出导出链接（已反转义 HTML）。
+func exportLinks(body string) []string {
+	var out []string
+	for _, m := range hrefRe.FindAllStringSubmatch(body, -1) {
+		out = append(out, html.UnescapeString(m[1]))
+	}
+	return out
+}
+
+// 回归：导出链接必须带上当前筛选条件（曾因模板转义 = 和 & 导致导出全部记录）。
+func TestExportHonorsFilters(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	_, all := c.get("/records/export?format=csv&mode=all")
+	if n := strings.Count(all, "\n"); n != 7 { // 表头 + 6 条演示台账
+		t.Fatalf("unfiltered export lines = %d", n)
+	}
+	code, page := c.get("/records?from=2000-01-01&to=2000-01-31&q=" + "巡检")
+	if code != 200 {
+		t.Fatal(code)
+	}
+	links := exportLinks(page)
+	if len(links) != 3 {
+		t.Fatalf("export links = %v", links)
+	}
+	for _, l := range links {
+		if !strings.Contains(l, "from=2000-01-01") || !strings.Contains(l, "to=2000-01-31") || !strings.Contains(l, "mode=all") || strings.Contains(l, "%3D") {
+			t.Fatalf("export link lost filters: %s", l)
+		}
+	}
+	_, filtered := c.get(links[0])
+	if n := strings.Count(filtered, "\n"); n != 1 {
+		t.Fatalf("filtered export should be header only, got %d lines", n)
+	}
+	if !strings.Contains(filtered, "子分类") {
+		t.Fatal("export header should use 子分类")
+	}
+}
+
+func TestWeeklyExportAndTeamPages(t *testing.T) {
+	srv, demo := setup(t)
+	admin := login(t, srv, "admin", "Admin12345")
+	_, page := admin.get("/reports/weekly?week_start=2000-01-05")
+	links := exportLinks(page)
+	if len(links) != 2 {
+		t.Fatalf("weekly export links = %v", links)
+	}
+	resp, err := admin.http.Get(srv.URL + links[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "spreadsheet") ||
+		!strings.Contains(resp.Header.Get("Content-Disposition"), "weekly-records-") {
+		t.Fatalf("weekly xlsx = %d %s %s", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Disposition"))
+	}
+	_, csv := admin.get(links[1])
+	if n := strings.Count(csv, "\n"); n != 1 {
+		t.Fatalf("weekly csv for empty week = %d lines", n)
+	}
+	// 员工不能越权导出他人范围
+	emp := login(t, srv, "wangwu", demo)
+	if code, _ := emp.get("/reports/weekly/export?format=csv&week_start=2026-01-05&target=dept:1"); code != 403 {
+		t.Fatalf("employee export dept = %d", code)
+	}
+	if code, _ := emp.get("/reports/weekly/export?format=pdf&week_start=2026-01-05"); code != 422 && code != 400 {
+		t.Fatalf("bad format = %d", code)
+	}
+	// 部门经理：团队台账可访问；旧地址跳转
+	mgr := login(t, srv, "manager", demo)
+	if code, _ := mgr.get("/team-records"); code != 200 {
+		t.Fatalf("manager team records = %d", code)
+	}
+	if code, _ := mgr.get("/department-records"); code != 302 {
+		t.Fatalf("legacy department-records = %d", code)
+	}
+}
+
+func TestClearDataAjax(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	c.get("/backup")
+	if code, body := c.post("/backup/ajax", "application/json", `{"action":"clear","password":"Admin12345","confirm_text":"清空"}`, true); code != 422 || !strings.Contains(body, "confirm_text") {
+		t.Fatalf("confirm text: %d %s", code, body)
+	}
+	if code, body := c.post("/backup/ajax", "application/json", `{"action":"clear","password":"bad","confirm_text":"确认清空","clear_categories":true,"clear_reports":true}`, true); code != 422 || !strings.Contains(body, "password") {
+		t.Fatalf("bad password: %d %s", code, body)
+	}
+	if code, body := c.post("/backup/ajax", "application/json", `{"action":"clear","password":"Admin12345","confirm_text":"确认清空","clear_categories":false,"clear_reports":true}`, true); code != 200 || !strings.Contains(body, "pre-clear-") {
+		t.Fatalf("clear: %d %s", code, body)
+	}
+	_, all := c.get("/records/export?format=csv&mode=all")
+	if n := strings.Count(all, "\n"); n != 1 {
+		t.Fatalf("records after clear = %d lines", n)
 	}
 }

@@ -19,7 +19,7 @@ type Exporter struct {
 }
 
 // ExportHeaders 导出列。
-var ExportHeaders = []string{"工作分类", "工作内容", "日期", "参与人员", "难易度", "次数", "集客分类", "记录人", "记录创建时间", "最后编辑用户", "最后编辑时间", "所属部门", "记录ID"}
+var ExportHeaders = []string{"工作分类", "工作内容", "日期", "参与人员", "难易度", "次数", "子分类", "记录人", "记录创建时间", "最后编辑用户", "最后编辑时间", "所属部门", "记录ID"}
 
 // ExportFile 导出结果。
 type ExportFile struct {
