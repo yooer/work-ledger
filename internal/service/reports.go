@@ -160,12 +160,13 @@ type collectSpec struct {
 	MaxRecords      int
 }
 
-func deptLabel(name, parent any) string {
+// deptLabel 部门显示名：优先完整路径。
+func deptLabel(name, path any) string {
 	if name == nil {
 		return "未分配部门"
 	}
-	if parent != nil {
-		return fmt.Sprint(parent) + " / " + fmt.Sprint(name)
+	if path != nil && fmt.Sprint(path) != "" {
+		return fmt.Sprint(path)
 	}
 	return fmt.Sprint(name)
 }
@@ -277,14 +278,14 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 	rows, err := db.All(c.DB, `SELECT r.id, r.content, r.work_at, r.difficulty, r.work_count, r.created_at, r.updated_at,
 		wc.name AS category_name, wc.is_customer_project, pc.name AS project_name,
 		u.id AS creator_id, u.name AS creator_name, u.username AS creator_username, u.employee_no AS creator_employee_no,
-		eu.name AS editor_name, d.name AS department_name, pd.name AS parent_department_name
+		eu.name AS editor_name, d.name AS department_name, dpp.path AS department_path
 		FROM work_records r
 		JOIN work_categories wc ON wc.id = r.work_category_id
 		LEFT JOIN project_categories pc ON pc.id = r.project_category_id
 		JOIN users u ON u.id = r.created_by
 		JOIN users eu ON eu.id = r.updated_by
 		LEFT JOIN departments d ON d.id = r.department_id
-		LEFT JOIN departments pd ON pd.id = d.parent_id
+		LEFT JOIN department_paths dpp ON dpp.id = d.id
 		WHERE `+where+` ORDER BY r.work_at ASC, r.id ASC LIMIT ?`, append(args, sp.MaxRecords)...)
 	if err != nil {
 		return nil, err
@@ -327,7 +328,7 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 		wc := int(r.Int("work_count"))
 		difficulty := int(r.Int("difficulty"))
 		creator := RecordPerson{ID: r.Int("creator_id"), Name: r.Str("creator_name"), Username: r.Str("creator_username"),
-			EmployeeNo: strPtr(r["creator_employee_no"]), Department: deptLabel(r["department_name"], r["parent_department_name"])}
+			EmployeeNo: strPtr(r["creator_employee_no"]), Department: deptLabel(r["department_name"], r["department_path"])}
 		parts := partMap[r.Int("id")]
 		if parts == nil {
 			parts = []RecordPerson{}
@@ -556,9 +557,9 @@ func participantMap(q db.Q, rows []Row) (map[int64][]RecordPerson, error) {
 			args = append(args, r.Int("id"))
 		}
 		list, err := db.All(q, `SELECT p.work_record_id, u.id, u.name, u.username, u.employee_no,
-			d.name AS department_name, pd.name AS parent_department_name
+			d.name AS department_name, dpp.path AS department_path
 			FROM work_record_participants p JOIN users u ON u.id = p.user_id
-			LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
+			LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN department_paths dpp ON dpp.id = d.id
 			WHERE p.work_record_id IN (`+db.Placeholders(len(args))+`) ORDER BY u.name`, args...)
 		if err != nil {
 			return nil, err
@@ -566,7 +567,7 @@ func participantMap(q db.Q, rows []Row) (map[int64][]RecordPerson, error) {
 		for _, r := range list {
 			out[r.Int("work_record_id")] = append(out[r.Int("work_record_id")], RecordPerson{
 				ID: r.Int("id"), Name: r.Str("name"), Username: r.Str("username"), EmployeeNo: strPtr(r["employee_no"]),
-				Department: deptLabel(r["department_name"], r["parent_department_name"]),
+				Department: deptLabel(r["department_name"], r["department_path"]),
 			})
 		}
 	}

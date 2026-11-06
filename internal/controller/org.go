@@ -29,6 +29,11 @@ func (c *Controllers) registerOrg(app *web.App) {
 
 	app.Page("/org-chart", web.Admin, c.orgChartPage)
 
+	app.Page("/positions", web.Admin, c.positionsPage)
+	app.Ajax("/positions/ajax", web.Admin, web.Actions{
+		"save": {Validate: validator.Position, Handle: c.savePosition},
+	})
+
 	app.Page("/categories", web.Admin, c.categoriesPage)
 	app.Ajax("/categories/ajax", web.Admin, web.Actions{
 		"save_work":    {Validate: validator.WorkCategory, Handle: c.saveWorkCategory},
@@ -115,7 +120,7 @@ func (c *Controllers) peoplePage(ctx *web.Ctx) error {
 
 func (c *Controllers) personForm(ctx *web.Ctx) error {
 	id := ctx.ID()
-	old := map[string]any{"id": int64(0), "username": "", "name": "", "employee_no": "", "role": "employee", "department_id": int64(0), "supervisor_id": int64(0), "phone": "", "email": "", "is_active": int64(1)}
+	old := map[string]any{"id": int64(0), "username": "", "name": "", "employee_no": "", "role": "employee", "position_id": int64(0), "department_id": int64(0), "supervisor_id": int64(0), "phone": "", "email": "", "is_active": int64(1)}
 	if id > 0 {
 		p, err := c.S.Users.Find(id)
 		if err != nil {
@@ -124,6 +129,10 @@ func (c *Controllers) personForm(ctx *web.Ctx) error {
 		old = p
 	}
 	depts, err := c.S.Depts.ActiveOptions(toInt(old["department_id"]))
+	if err != nil {
+		return err
+	}
+	positions, err := c.S.Positions.Options(toInt(old["position_id"]))
 	if err != nil {
 		return err
 	}
@@ -143,12 +152,12 @@ func (c *Controllers) personForm(ctx *web.Ctx) error {
 	}
 	return ctx.Render("people/form", map[string]any{
 		"PageTitle": title, "Active": "people", "Old": old, "IsEdit": id > 0, "Departments": depts,
-		"IsSelf": id == ctx.UserID(), "Supervisors": supervisors, "DirectReports": reports,
+		"IsSelf": id == ctx.UserID(), "Supervisors": supervisors, "DirectReports": reports, "Positions": positions, "RoleLevels": service.RoleLevels,
 	})
 }
 
 func toUserInput(p validator.UserInput) service.UserInput {
-	return service.UserInput{Username: p.Username, Name: p.Name, EmployeeNo: p.EmployeeNo, Role: p.Role, DepartmentID: p.DepartmentID, SupervisorID: p.SupervisorID,
+	return service.UserInput{Username: p.Username, Name: p.Name, EmployeeNo: p.EmployeeNo, PositionID: p.PositionID, DepartmentID: p.DepartmentID, SupervisorID: p.SupervisorID,
 		Phone: p.Phone, Email: p.Email, IsActive: p.IsActive, Password: p.Password}
 }
 
@@ -193,6 +202,29 @@ func (c *Controllers) orgChartPage(ctx *web.Ctx) error {
 		return err
 	}
 	return ctx.Render("people/org", map[string]any{"PageTitle": "组织架构", "Active": "org-chart", "Trees": trees, "Unassigned": unassigned})
+}
+
+// ---------------- 职务 ----------------
+
+func (c *Controllers) positionsPage(ctx *web.Ctx) error {
+	list, err := c.S.Positions.List()
+	if err != nil {
+		return err
+	}
+	return ctx.Render("positions/index", map[string]any{"PageTitle": "职务管理", "Active": "positions", "Positions": list, "RoleLevels": service.RoleLevels})
+}
+
+func (c *Controllers) savePosition(ctx *web.Ctx, in any) (any, error) {
+	p := in.(validator.PositionInput)
+	created, err := c.S.Positions.Save(service.PositionInput{ID: p.ID, Name: p.Name, Role: p.Role, SortOrder: p.SortOrder, IsActive: p.IsActive})
+	if err != nil {
+		return nil, err
+	}
+	msg := "职务已更新，担任该职务的人员按新的权限级别立即生效。"
+	if created {
+		msg = "职务已新增。职务不会被删除，不再使用时请停用。"
+	}
+	return web.Result{Message: msg, Redirect: "/positions", FlashOnRedirect: true}, nil
 }
 
 // ---------------- 分类 ----------------

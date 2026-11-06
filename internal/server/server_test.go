@@ -104,7 +104,7 @@ func TestAjaxConventions(t *testing.T) {
 	if code, body := c.post("/auth/ajax", "application/json", `{"action":"login","username":"admin","password":"Admin12345"}`, true); code != 200 || !strings.Contains(body, `"redirect":"/"`) {
 		t.Fatalf("login: %d %s", code, body)
 	}
-	for _, p := range []string{"/", "/records", "/my-records", "/records/create", "/people", "/departments", "/categories", "/reports/weekly", "/reports/yearly", "/reports/period", "/settings", "/backup", "/records/import", "/security", "/password", "/org-chart", "/team-records", "/people/3/edit"} {
+	for _, p := range []string{"/", "/records", "/my-records", "/records/create", "/people", "/departments", "/categories", "/reports/weekly", "/reports/yearly", "/reports/period", "/settings", "/backup", "/records/import", "/security", "/password", "/org-chart", "/team-records", "/people/3/edit", "/positions", "/departments/create"} {
 		if code, body := c.get(p); code != 200 {
 			t.Errorf("GET %s = %d %.200s", p, code, body)
 		}
@@ -120,7 +120,7 @@ func TestPermissionsAndAPI(t *testing.T) {
 	c.get("/login")
 	c.post("/auth/ajax", "application/json", `{"action":"login","username":"wangwu","password":"`+demo+`"}`, true)
 	c.get("/")
-	for p, want := range map[string]int{"/records": 403, "/people": 403, "/backup": 403, "/team-records": 403, "/org-chart": 403, "/my-records": 200} {
+	for p, want := range map[string]int{"/records": 403, "/people": 403, "/backup": 403, "/team-records": 403, "/org-chart": 403, "/positions": 403, "/my-records": 200} {
 		if code, _ := c.get(p); code != want {
 			t.Errorf("employee GET %s = %d, want %d", p, code, want)
 		}
@@ -284,5 +284,24 @@ func TestParticipantListAndDeleteAjax(t *testing.T) {
 	}
 	if code, _ := emp.get("/records/" + own[1]); code != 404 {
 		t.Fatalf("deleted record = %d", code)
+	}
+}
+
+func TestPositionAjax(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	c.get("/positions")
+	if code, body := c.post("/positions/ajax", "application/json", `{"action":"save","name":"班组长","role":"employee","sort_order":5,"is_active":true}`, true); code != 200 {
+		t.Fatalf("create position: %d %s", code, body)
+	}
+	if code, body := c.post("/positions/ajax", "application/json", `{"action":"save","name":"","role":"boss"}`, true); code != 422 || !strings.Contains(body, "role") {
+		t.Fatalf("invalid position: %d %s", code, body)
+	}
+	_, page := c.get("/people/3/edit")
+	if !strings.Contains(page, `name="position_id"`) || !strings.Contains(page, "班组长（普通成员）") {
+		t.Fatal("person form should offer positions")
+	}
+	if code, body := c.post("/people/ajax", "application/json", `{"action":"update","id":3,"username":"zhangsan","name":"张三","employee_no":"E1001","position_id":0,"is_active":true}`, true); code != 422 || !strings.Contains(body, "position_id") {
+		t.Fatalf("missing position: %d %s", code, body)
 	}
 }

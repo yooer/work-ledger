@@ -18,6 +18,28 @@ CREATE TABLE IF NOT EXISTS departments (
 CREATE UNIQUE INDEX IF NOT EXISTS ux_departments_name ON departments(name COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS ix_departments_parent ON departments(parent_id);
 
+-- Go 版新增：部门完整路径（不限层级），如“华东分公司 / 集客部 / 一组”。
+CREATE VIEW IF NOT EXISTS department_paths AS
+WITH RECURSIVE t(id, path, depth) AS (
+    SELECT id, name, 0 FROM departments WHERE parent_id IS NULL
+    UNION ALL
+    SELECT d.id, t.path || ' / ' || d.name, t.depth + 1 FROM departments d JOIN t ON d.parent_id = t.id WHERE t.depth < 50
+)
+SELECT id, path, depth FROM t;
+
+-- Go 版新增：职务（名称可自定义，每个职务绑定一个权限级别 role）。
+CREATE TABLE IF NOT EXISTS positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL COLLATE NOCASE,
+    role TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('admin', 'manager', 'employee')),
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_positions_name ON positions(name COLLATE NOCASE);
+
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL COLLATE NOCASE,
@@ -37,6 +59,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     supervisor_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+    position_id INTEGER NULL REFERENCES positions(id) ON DELETE SET NULL,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT
 );
 

@@ -35,7 +35,8 @@ func (d *DB) Migrate() ([]string, error) {
 		{"totp_enabled", "INTEGER NOT NULL DEFAULT 0"},
 		{"totp_recovery_codes", "TEXT NULL"},
 		{"totp_last_used_step", "INTEGER NULL"},
-		{"supervisor_id", "INTEGER NULL REFERENCES users(id) ON DELETE SET NULL"}, // Go 版新增：主管领导
+		{"supervisor_id", "INTEGER NULL REFERENCES users(id) ON DELETE SET NULL"},   // Go 版新增：主管领导
+		{"position_id", "INTEGER NULL REFERENCES positions(id) ON DELETE SET NULL"}, // Go 版新增：职务
 	}
 	for _, c := range userCols {
 		if !cols[c.name] {
@@ -48,6 +49,9 @@ func (d *DB) Migrate() ([]string, error) {
 
 	// 主管领导索引放在补字段之后创建（旧库先补列）。
 	if _, err := d.Exec("CREATE INDEX IF NOT EXISTS ix_users_supervisor ON users(supervisor_id)"); err != nil {
+		return notes, err
+	}
+	if _, err := d.Exec("CREATE INDEX IF NOT EXISTS ix_users_position ON users(position_id)"); err != nil {
 		return notes, err
 	}
 

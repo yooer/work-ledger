@@ -8,13 +8,12 @@
             <div class="col-md-6 mb-3"><label class="form-label required">登录账号</label><input class="form-control" type="text" name="username" value="{{.Old.username}}" maxlength="64" required><div class="form-hint">3-64 位字母、数字或 _ . @ -</div></div>
             <div class="col-md-6 mb-3"><label class="form-label required">姓名</label><input class="form-control" type="text" name="name" value="{{.Old.name}}" maxlength="50" required></div>
             <div class="col-md-6 mb-3"><label class="form-label">员工工号</label><input class="form-control" type="text" name="employee_no" value="{{str .Old.employee_no}}" maxlength="30"><div class="form-hint">可用于登录，需唯一。</div></div>
-            <div class="col-md-6 mb-3"><label class="form-label required">角色</label>
-                <select class="form-select" name="role"{{if .IsSelf}} disabled{{end}}>
-                    <option value="employee"{{if eq (str .Old.role) "employee"}} selected{{end}}>员工</option>
-                    <option value="manager"{{if eq (str .Old.role) "manager"}} selected{{end}}>部门经理</option>
-                    <option value="admin"{{if eq (str .Old.role) "admin"}} selected{{end}}>系统管理员</option>
+            <div class="col-md-6 mb-3"><label class="form-label required">职务</label>
+                <select class="form-select" name="position_id"{{if .IsSelf}} disabled{{end}}>
+                    <option value="0">请选择职务</option>
+                    {{$pos := .Old.position_id}}{{range .Positions}}<option value="{{.id}}"{{if same .id $pos}} selected{{end}}>{{.name}}（{{roleLevel .role}}）{{if ne .is_active 1}} · 已停用{{end}}</option>{{end}}
                 </select>
-                {{if .IsSelf}}<input type="hidden" name="role" value="{{.Old.role}}"><div class="form-hint">不能修改自己的角色。</div>{{else}}<div class="form-hint">部门经理可查看、导出本部门（含子部门）台账并生成部门总结；任何人只要有下属，也可查看、导出下属台账。</div>{{end}}
+                {{if .IsSelf}}<input type="hidden" name="position_id" value="{{.Old.position_id}}"><div class="form-hint">不能修改自己的职务。</div>{{else}}<div class="form-hint">权限由职务的权限级别决定：部门管理者可查看、导出本部门及所有下级部门的台账；任何人只要有下属，也可查看、导出下属台账。职务在<a href="/positions">职务管理</a>中维护。</div>{{end}}
             </div>
             <div class="col-md-6 mb-3"><label class="form-label">所属部门</label>
                 <select class="form-select" name="department_id" data-tom><option value="0">未分配部门</option>

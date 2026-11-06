@@ -24,6 +24,7 @@ type Services struct {
 	Auth       *Auth
 	Security   *Security
 	Users      *Users
+	Positions  *Positions
 	Depts      *Departments
 	Categories *Categories
 	Records    *Records
@@ -45,6 +46,7 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Auth = &Auth{Core: core}
 	s.Security = &Security{Core: core}
 	s.Users = &Users{Core: core}
+	s.Positions = &Positions{Core: core}
 	s.Depts = &Departments{Core: core}
 	s.Categories = &Categories{Core: core}
 	s.Records = &Records{Core: core, Settings: s.Settings}

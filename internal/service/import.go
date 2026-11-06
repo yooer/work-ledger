@@ -536,7 +536,7 @@ func (s *Importer) Import(rows []ImportRow, opt ImportOptions) (*ImportResult, e
 				return err
 			}
 		}
-		return nil
+		return ensurePositions(tx) // 自动创建的历史人员补上“员工”职务
 	})
 	if err != nil {
 		return nil, err

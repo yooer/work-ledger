@@ -43,8 +43,8 @@ func recordDept(r Row) string {
 	if r.Str("department_name") == "" {
 		return ""
 	}
-	if r.Str("parent_department_name") != "" {
-		return r.Str("parent_department_name") + " / " + r.Str("department_name")
+	if p := r.Str("department_path"); p != "" {
+		return p
 	}
 	return r.Str("department_name")
 }

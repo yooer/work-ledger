@@ -38,6 +38,7 @@
                     {{template "nav-item" (dict "Active" .Active "Key" "records" "Href" "/records" "Icon" "ledger" "Label" "全部台账")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "records-import" "Href" "/records/import" "Icon" "import" "Label" "数据导入")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "people" "Href" "/people" "Icon" "people" "Label" "人员管理")}}
+                    {{template "nav-item" (dict "Active" .Active "Key" "positions" "Href" "/positions" "Icon" "badge" "Label" "职务管理")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "org-chart" "Href" "/org-chart" "Icon" "org" "Label" "组织架构")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "departments" "Href" "/departments" "Icon" "building" "Label" "部门管理")}}
                     {{template "nav-item" (dict "Active" .Active "Key" "categories" "Href" "/categories" "Icon" "tag" "Label" "分类管理")}}
@@ -50,7 +51,7 @@
                         <span class="avatar avatar-sm me-2 bg-primary-lt">{{first (str .User.name)}}</span>
                         <div class="text-truncate">
                             <div class="fw-bold text-truncate">{{.User.name}}</div>
-                            <div class="small text-secondary">{{role .User.role}}</div>
+                            <div class="small text-secondary">{{if .User.position_name}}{{.User.position_name}}{{else}}{{role .User.role}}{{end}}</div>
                         </div>
                     </div>
                     <div class="small text-secondary mt-2 text-truncate" title="{{.DepartmentLabel}}">{{.DepartmentLabel}}</div>
@@ -89,7 +90,7 @@
         <footer class="footer footer-transparent d-print-none">
             <div class="container-xl d-flex flex-wrap justify-content-between small text-secondary">
                 <span>{{.App.Name}} · 让每一份工作都有记录</span>
-                <span>{{role .User.role}} · {{.DepartmentLabel}} · v{{.App.Version}}</span>
+                <span>{{if .User.position_name}}{{.User.position_name}}{{else}}{{role .User.role}}{{end}} · {{.DepartmentLabel}} · v{{.App.Version}}</span>
             </div>
         </footer>
     </div>

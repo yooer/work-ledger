@@ -29,7 +29,7 @@ type RecordFilter struct {
 const recordColumns = `SELECT r.*, wc.name AS category_name, wc.is_customer_project,
 	pc.name AS project_name, u.name AS creator_name, u.username AS creator_username,
 	u.employee_no AS creator_employee_no, eu.name AS editor_name,
-	d.name AS department_name, pd.name AS parent_department_name`
+	d.name AS department_name, dpp.path AS department_path`
 
 const recordJoins = ` FROM work_records r
 	JOIN work_categories wc ON wc.id = r.work_category_id
@@ -37,7 +37,7 @@ const recordJoins = ` FROM work_records r
 	JOIN users u ON u.id = r.created_by
 	JOIN users eu ON eu.id = r.updated_by
 	LEFT JOIN departments d ON d.id = r.department_id
-	LEFT JOIN departments pd ON pd.id = d.parent_id`
+	LEFT JOIN department_paths dpp ON dpp.id = d.id`
 
 func (s *Records) where(sc Scope, f RecordFilter) (string, []any, error) {
 	scopeSQL, args := sc.SQL("r")

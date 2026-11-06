@@ -22,11 +22,12 @@ type KV interface {
 type Auth struct{ *Core }
 
 const userSelect = `SELECT u.*, d.name AS department_name, d.parent_id AS department_parent_id,
-	pd.name AS parent_department_name,
+	dpp.path AS department_path,
+	(SELECT name FROM positions WHERE id = u.position_id) AS position_name,
 	EXISTS (SELECT 1 FROM users sub WHERE sub.supervisor_id = u.id AND sub.id <> u.id) AS has_subordinates
 	FROM users u
 	LEFT JOIN departments d ON d.id = u.department_id
-	LEFT JOIN departments pd ON pd.id = d.parent_id`
+	LEFT JOIN department_paths dpp ON dpp.id = d.id`
 
 // LoadActiveUser 加载启用状态的用户（含部门名称），不存在返回 nil。
 func (a *Auth) LoadActiveUser(id int64) (Row, error) {

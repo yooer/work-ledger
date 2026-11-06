@@ -530,7 +530,7 @@ const phpBackupSample = `{"format":"work-ledger-backup","version":1,"created_at"
 
 func TestRestorePHPBackupSample(t *testing.T) {
 	s, _ := newTestServices(t)
-	data, err := s.Backup.Decode([]byte(phpBackupSample))
+	data, err := s.Backup.Decode([]byte(phpBackupSample)) // PHP 版备份：没有 positions 表
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,6 +549,9 @@ func TestRestorePHPBackupSample(t *testing.T) {
 		t.Fatalf("2FA user should need second factor: %v %v", res, err)
 	}
 	admin := userByName(t, s, "rasmus")
+	if admin.Str("position_name") != "系统管理员" {
+		t.Fatalf("PHP admin should map to 系统管理员 position, got %q", admin.Str("position_name"))
+	}
 	sc, _ := s.Core.ScopeFor(admin)
 	rec, err := s.Records.Find(sc, 10)
 	if err != nil || rec.Str("project_name") != "集团专线" || len(rec["participants"].([]Row)) != 2 {
@@ -758,4 +761,144 @@ func TestImportAuditColumns(t *testing.T) {
 	if r.Str("creator") != "张三" || r.Str("editor") != "李四" || r.Str("created_at") != "2026-03-02 18:00:05" || r.Str("updated_at") != "2026-03-05 08:15:00" {
 		t.Fatalf("audit fields = %v", r)
 	}
+}
+
+func positionID(t *testing.T, s *Services, name string) int64 {
+	t.Helper()
+	id, err := db.Int(s.Core.DB, "SELECT id FROM positions WHERE name = ?", name)
+	if err != nil || id == 0 {
+		t.Fatalf("position %s: %v", name, err)
+	}
+	return id
+}
+
+func TestPositionsDefaultsAndPermissions(t *testing.T) {
+	s, _ := newTestServices(t)
+	n, _ := db.Int(s.Core.DB, "SELECT COUNT(*) FROM positions")
+	if n != int64(len(DefaultPositions)) {
+		t.Fatalf("default positions = %d", n)
+	}
+	// 现有人员按原角色对应职务
+	if got := userByName(t, s, "manager").Int("position_id"); got != positionID(t, s, "部门经理") {
+		t.Fatalf("manager position = %d", got)
+	}
+	if got := userByName(t, s, "admin").Str("position_name"); got != "系统管理员" {
+		t.Fatalf("admin position name = %q", got)
+	}
+	admin := userByName(t, s, "admin")
+	// 给王五设“分公司副总经理”（部门管理者）→ role 变为 manager
+	w := userByName(t, s, "wangwu")
+	in := UserInput{Username: "wangwu", Name: w.Str("name"), EmployeeNo: w.Str("employee_no"), PositionID: positionID(t, s, "分公司副总经理"),
+		DepartmentID: w.Int("department_id"), IsActive: true}
+	if err := s.Users.Update(admin.Int("id"), w.Int("id"), in); err != nil {
+		t.Fatal(err)
+	}
+	if got := userByName(t, s, "wangwu").Str("role"); got != "manager" {
+		t.Fatalf("role after position = %s", got)
+	}
+	// 修改职务的权限级别 → 担任者同步
+	pid := positionID(t, s, "分公司副总经理")
+	if _, err := s.Positions.Save(PositionInput{ID: pid, Name: "分公司副总经理", Role: "employee", SortOrder: 30, IsActive: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := userByName(t, s, "wangwu").Str("role"); got != "employee" {
+		t.Fatalf("role after level change = %s", got)
+	}
+	// 系统管理员职务有人在用：不能改级别、不能停用
+	adminPos := positionID(t, s, "系统管理员")
+	if _, err := s.Positions.Save(PositionInput{ID: adminPos, Name: "系统管理员", Role: "manager", IsActive: true}); err == nil {
+		t.Fatal("admin position level change should be rejected")
+	}
+	if _, err := s.Positions.Save(PositionInput{ID: adminPos, Name: "系统管理员", Role: "admin", IsActive: false}); err == nil {
+		t.Fatal("admin position deactivation should be rejected")
+	}
+	// 重名
+	if _, err := s.Positions.Save(PositionInput{Name: "主管", Role: "employee", IsActive: true}); err == nil {
+		t.Fatal("duplicate position name accepted")
+	}
+	// 新增职务并停用后，不能再分配给新人员
+	if _, err := s.Positions.Save(PositionInput{Name: "班组长", Role: "employee", IsActive: false}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Users.Create(UserInput{Username: "newbie", Name: "新人", PositionID: positionID(t, s, "班组长"), IsActive: true, Password: "Passw0rd!"})
+	if e, ok := apperr.As(err); !ok || e.Fields["position_id"] == "" {
+		t.Fatalf("inactive position should be rejected: %v", err)
+	}
+	// 不能修改自己的职务
+	err = s.Users.Update(admin.Int("id"), admin.Int("id"), UserInput{Username: "admin", Name: admin.Str("name"), PositionID: positionID(t, s, "员工"), IsActive: true})
+	if e, ok := apperr.As(err); !ok || e.Fields["position_id"] == "" {
+		t.Fatalf("self position change should be rejected: %v", err)
+	}
+}
+
+func TestMultiLevelDepartments(t *testing.T) {
+	s, _ := newTestServices(t)
+	admin := userByName(t, s, "admin")
+	a, err := s.Depts.Create(DepartmentInput{Name: "华东分公司", IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Depts.Create(DepartmentInput{Name: "华东集客部", ParentID: a, IsActive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Depts.Create(DepartmentInput{Name: "华东一组", ParentID: b, IsActive: true})
+	if err != nil {
+		t.Fatalf("third level should be allowed: %v", err)
+	}
+	if label, _ := s.Depts.LabelByID(c); label != "华东分公司 / 华东集客部 / 华东一组" {
+		t.Fatalf("label = %q", label)
+	}
+	// 防循环：不能把分公司挂到自己的下级下面
+	if err := s.Depts.Update(a, DepartmentInput{Name: "华东分公司", ParentID: c, IsActive: true}); err == nil {
+		t.Fatal("cycle accepted")
+	}
+	// 分公司总经理（部门管理者）在分公司；一组员工的台账对其可见
+	if _, err := s.Users.Create(UserInput{Username: "gm", Name: "总经理", PositionID: positionID(t, s, "分公司总经理"), DepartmentID: a, IsActive: true, Password: "Passw0rd!"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Users.Create(UserInput{Username: "worker", Name: "组员", PositionID: positionID(t, s, "员工"), DepartmentID: c, IsActive: true, Password: "Passw0rd!"}); err != nil {
+		t.Fatal(err)
+	}
+	worker := userByName(t, s, "worker")
+	if DepartmentPath := worker.Str("department_path"); DepartmentPath != "华东分公司 / 华东集客部 / 华东一组" {
+		t.Fatalf("user department_path = %q", DepartmentPath)
+	}
+	recID, err := s.Records.Create(worker, RecordInput{WorkCategoryID: 3, Content: "三级部门台账", WorkAt: "2026-10-27 09:00:00", Difficulty: 2, WorkCount: 1, ParticipantIDs: []int64{worker.Int("id")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gm := userByName(t, s, "gm")
+	sc, _ := s.Core.ScopeFor(gm)
+	rec, err := s.Records.Find(sc, recID)
+	if err != nil {
+		t.Fatalf("branch manager should see third-level record: %v", err)
+	}
+	if recordDept(rec) != "华东分公司 / 华东集客部 / 华东一组" {
+		t.Fatalf("record dept = %q", recordDept(rec))
+	}
+	// 部门总结（分公司，含所有下级）
+	d, err := s.Weekly.Data("2026-10-26", "2026-11-01", ReportTarget{DepartmentID: a}, true, 100)
+	if err != nil || d.Summary.RecordCount != 1 {
+		t.Fatalf("branch weekly = %d %v", d.Summary.RecordCount, err)
+	}
+	// 多级部门 + 职务的备份恢复
+	raw, err := s.Backup.ExportJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := s.Backup.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Backup.Restore(data); err != nil {
+		t.Fatalf("restore multi-level: %v", err)
+	}
+	if label, _ := s.Depts.LabelByID(c); label != "华东分公司 / 华东集客部 / 华东一组" {
+		t.Fatalf("label after restore = %q", label)
+	}
+	if got := userByName(t, s, "gm").Str("position_name"); got != "分公司总经理" {
+		t.Fatalf("position after restore = %q", got)
+	}
+	_ = admin
 }

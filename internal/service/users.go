@@ -48,10 +48,10 @@ func (s *Users) List(f UserFilter, page, perPage int) ([]Row, int, int, error) {
 		return nil, 0, 0, err
 	}
 	page, offset := clampPage(page, int(total), perPage)
-	rows, err := db.All(s.DB, `SELECT u.*, d.name AS department_name, pd.name AS parent_department_name, su.name AS supervisor_name
-		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
-		LEFT JOIN users su ON su.id = u.supervisor_id
-		WHERE `+where+` ORDER BY u.is_active DESC, COALESCE(pd.name, d.name, u.name), d.name, u.name
+	rows, err := db.All(s.DB, `SELECT u.*, d.name AS department_name, dpp.path AS department_path, su.name AS supervisor_name, pos.name AS position_name
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN department_paths dpp ON dpp.id = d.id
+		LEFT JOIN users su ON su.id = u.supervisor_id LEFT JOIN positions pos ON pos.id = u.position_id
+		WHERE `+where+` ORDER BY u.is_active DESC, COALESCE(dpp.path, u.name), u.name
 		LIMIT ? OFFSET ?`, append(args, perPage, offset)...)
 	return rows, int(total), page, err
 }
@@ -75,8 +75,9 @@ func clampPage(page, total, perPage int) (int, int) {
 }
 
 func (s *Users) Find(id int64) (Row, error) {
-	r, err := db.One(s.DB, `SELECT u.*, d.name AS department_name, pd.name AS parent_department_name
-		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
+	r, err := db.One(s.DB, `SELECT u.*, d.name AS department_name, dpp.path AS department_path, pos.name AS position_name
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN department_paths dpp ON dpp.id = d.id
+		LEFT JOIN positions pos ON pos.id = u.position_id
 		WHERE u.id = ?`, id)
 	if err != nil {
 		return nil, err
@@ -92,13 +93,41 @@ type UserInput struct {
 	Username     string
 	Name         string
 	EmployeeNo   string
-	Role         string
+	Role         string // 由职务决定；仅内部调用未给职务时按此匹配默认职务
+	PositionID   int64  // 职务
 	DepartmentID int64
 	SupervisorID int64 // 主管领导，0 表示无
 	Phone        string
 	Email        string
 	IsActive     bool
 	Password     string // 仅新建时
+}
+
+// resolvePosition 按职务确定权限级别（in.Role）。职务必须存在；新选择的职务不能是已停用的。
+func (s *Users) resolvePosition(in *UserInput, current Row) (string, error) {
+	if in.PositionID <= 0 && in.Role != "" {
+		// 内部调用（如测试、脚本）只给了权限级别：使用该级别的默认职务
+		id, err := db.Int(s.DB, "SELECT id FROM positions WHERE role = ? ORDER BY is_active DESC, sort_order, id LIMIT 1", in.Role)
+		if err != nil {
+			return "", err
+		}
+		in.PositionID = id
+	}
+	if in.PositionID <= 0 {
+		return "请选择职务。", nil
+	}
+	p, err := db.One(s.DB, "SELECT * FROM positions WHERE id = ?", in.PositionID)
+	if err != nil {
+		return "", err
+	}
+	if p == nil {
+		return "所选职务不存在。", nil
+	}
+	if !p.Bool("is_active") && in.PositionID != current.Int("position_id") {
+		return "所选职务已停用。", nil
+	}
+	in.Role = p.Str("role")
+	return "", nil
 }
 
 func (s *Users) check(id int64, in UserInput, current Row) error {
@@ -177,9 +206,9 @@ func (s *Users) SupervisorOptions(id, current int64) ([]Row, error) {
 		}
 		exclude = append(subs, id)
 	}
-	rows, err := db.All(s.DB, `SELECT u.id, u.name, u.employee_no, u.role, u.is_active, d.name AS department_name, pd.name AS parent_department_name
-		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
-		WHERE u.is_active = 1 OR u.id = ? ORDER BY u.is_active DESC, COALESCE(pd.name, d.name, u.name), d.name, u.name`, current)
+	rows, err := db.All(s.DB, `SELECT u.id, u.name, u.employee_no, u.role, u.is_active, d.name AS department_name, dpp.path AS department_path
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN department_paths dpp ON dpp.id = d.id
+		WHERE u.is_active = 1 OR u.id = ? ORDER BY u.is_active DESC, COALESCE(dpp.path, u.name), u.name`, current)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +229,11 @@ func (s *Users) DirectReports(id int64) ([]Row, error) {
 }
 
 func (s *Users) Create(in UserInput) (int64, error) {
+	if msg, err := s.resolvePosition(&in, nil); err != nil {
+		return 0, err
+	} else if msg != "" {
+		return 0, apperr.Validation(map[string]string{"position_id": msg})
+	}
 	if err := s.check(0, in, nil); err != nil {
 		return 0, err
 	}
@@ -208,9 +242,9 @@ func (s *Users) Create(in UserInput) (int64, error) {
 		return 0, err
 	}
 	ts := now()
-	return db.Insert(s.DB, `INSERT INTO users (username, password_hash, name, employee_no, role, department_id, supervisor_id, phone, email, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		in.Username, h, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.DepartmentID), nullInt(in.SupervisorID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), ts, ts)
+	return db.Insert(s.DB, `INSERT INTO users (username, password_hash, name, employee_no, role, position_id, department_id, supervisor_id, phone, email, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.Username, h, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.PositionID), nullInt(in.DepartmentID), nullInt(in.SupervisorID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), ts, ts)
 }
 
 // Update 编辑人员，包含“不能停用自己/改自己角色、至少保留一名管理员”规则。
@@ -218,6 +252,11 @@ func (s *Users) Update(actorID, id int64, in UserInput) error {
 	cur, err := s.Find(id)
 	if err != nil {
 		return err
+	}
+	if msg, err := s.resolvePosition(&in, cur); err != nil {
+		return err
+	} else if msg != "" {
+		return apperr.Validation(map[string]string{"position_id": msg})
 	}
 	if err := s.check(id, in, cur); err != nil {
 		return err
@@ -227,8 +266,8 @@ func (s *Users) Update(actorID, id int64, in UserInput) error {
 	if isSelf && !in.IsActive {
 		fields["is_active"] = "不能停用当前登录的账号。"
 	}
-	if isSelf && in.Role != cur.Str("role") {
-		fields["role"] = "不能修改自己的角色，以免误操作导致无法管理系统。"
+	if isSelf && (in.Role != cur.Str("role") || (cur.Int("position_id") > 0 && in.PositionID != cur.Int("position_id"))) {
+		fields["position_id"] = "不能修改自己的职务，以免误操作导致无法管理系统。"
 	}
 	wasActiveAdmin := cur.Str("role") == "admin" && cur.Bool("is_active")
 	willRemain := in.Role == "admin" && in.IsActive
@@ -238,16 +277,16 @@ func (s *Users) Update(actorID, id int64, in UserInput) error {
 			return err
 		}
 		if n <= 1 {
-			fields["role"] = "系统必须至少保留一名启用状态的管理员。"
+			fields["position_id"] = "系统必须至少保留一名启用状态的管理员（系统管理员级别的职务）。"
 		}
 	}
 	if len(fields) > 0 {
 		return apperr.Validation(fields)
 	}
 	return s.DB.Tx(func(tx db.Q) error {
-		if _, err := db.Exec(tx, `UPDATE users SET username = ?, name = ?, employee_no = ?, role = ?, department_id = ?, supervisor_id = ?,
+		if _, err := db.Exec(tx, `UPDATE users SET username = ?, name = ?, employee_no = ?, role = ?, position_id = ?, department_id = ?, supervisor_id = ?,
 			phone = ?, email = ?, is_active = ?, updated_at = ? WHERE id = ?`,
-			in.Username, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.DepartmentID), nullInt(in.SupervisorID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), now(), id); err != nil {
+			in.Username, in.Name, nullStr(in.EmployeeNo), in.Role, nullInt(in.PositionID), nullInt(in.DepartmentID), nullInt(in.SupervisorID), nullStr(in.Phone), nullStr(in.Email), boolInt(in.IsActive), now(), id); err != nil {
 			return err
 		}
 		if !in.IsActive {
@@ -301,9 +340,9 @@ func (s *Users) ParticipantOptions(selected []int64) ([]Row, error) {
 		}
 	}
 	return db.All(s.DB, `SELECT u.id, u.username, u.name, u.employee_no, u.role, u.department_id, u.is_active,
-		d.name AS department_name, pd.name AS parent_department_name
-		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
-		WHERE `+cond+` ORDER BY COALESCE(pd.name, d.name, u.name), d.name, u.name`, args...)
+		d.name AS department_name, dpp.path AS department_path
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN department_paths dpp ON dpp.id = d.id
+		WHERE `+cond+` ORDER BY COALESCE(dpp.path, u.name), u.name`, args...)
 }
 
 // EmployeeOptions 筛选用的员工列表（scope 限定可见范围：本人 + 下属 + 分管部门人员）。
@@ -342,6 +381,7 @@ type OrgNode struct {
 	Name       string
 	EmployeeNo string
 	Role       string
+	Position   string // 职务名称
 	Department string
 	Active     bool
 	TeamSize   int // 直接 + 间接下属人数
@@ -352,9 +392,10 @@ type OrgNode struct {
 // Unassigned 为既无上级也无下属的人员。数据异常形成环时，环上人员作为根节点展示，不会死循环。
 func (s *Users) OrgChart() (trees []*OrgNode, unassigned []*OrgNode, err error) {
 	rows, err := db.All(s.DB, `SELECT u.id, u.name, u.employee_no, u.role, u.is_active, u.supervisor_id,
-		d.name AS department_name, pd.name AS parent_department_name
-		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN departments pd ON pd.id = d.parent_id
-		ORDER BY u.is_active DESC, COALESCE(pd.name, d.name, u.name), d.name, u.name`)
+		(SELECT name FROM positions WHERE id = u.position_id) AS position_name,
+		d.name AS department_name, dpp.path AS department_path
+		FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN department_paths dpp ON dpp.id = d.id
+		ORDER BY u.is_active DESC, COALESCE(dpp.path, u.name), u.name`)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -363,8 +404,8 @@ func (s *Users) OrgChart() (trees []*OrgNode, unassigned []*OrgNode, err error) 
 	var order []int64
 	for _, r := range rows {
 		id := r.Int("id")
-		nodes[id] = &OrgNode{ID: id, Name: r.Str("name"), EmployeeNo: r.Str("employee_no"), Role: r.Str("role"),
-			Department: deptLabel(r["department_name"], r["parent_department_name"]), Active: r.Bool("is_active")}
+		nodes[id] = &OrgNode{ID: id, Name: r.Str("name"), EmployeeNo: r.Str("employee_no"), Role: r.Str("role"), Position: r.Str("position_name"),
+			Department: deptLabel(r["department_name"], r["department_path"]), Active: r.Bool("is_active")}
 		if sid := r.Int("supervisor_id"); sid > 0 && sid != id {
 			parent[id] = sid
 		}

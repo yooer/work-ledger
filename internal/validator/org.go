@@ -53,7 +53,7 @@ type UserInput struct {
 	Username     string
 	Name         string
 	EmployeeNo   string
-	Role         string
+	PositionID   int64
 	DepartmentID int64
 	SupervisorID int64
 	Phone        string
@@ -69,7 +69,7 @@ func user(in Input, creating bool) (UserInput, *V) {
 		Username:     v.Raw("username"),
 		Name:         v.Raw("name"),
 		EmployeeNo:   v.Str("employee_no", "员工工号", 30),
-		Role:         v.OneOf("role", "角色", "employee", "admin", "manager", "employee"),
+		PositionID:   v.ID("position_id"),
 		DepartmentID: v.ID("department_id"),
 		SupervisorID: v.ID("supervisor_id"),
 		Phone:        v.Str("phone", "联系电话", 30),
@@ -88,6 +88,9 @@ func user(in Input, creating bool) (UserInput, *V) {
 	}
 	if creating {
 		passwordRule(v, "password", out.Password, "初始密码")
+	}
+	if out.PositionID <= 0 {
+		v.Fail("position_id", "请选择职务。")
 	}
 	if out.ID > 0 && out.SupervisorID == out.ID {
 		v.Fail("supervisor_id", "主管领导不能是本人。")
@@ -173,5 +176,30 @@ func ProjectCategory(in Input) (any, error) {
 		IsActive:       v.Bool("is_active"),
 	}
 	lenBetween(v, "name", "子分类名称", out.Name, 2, 60)
+	return out, v.Err()
+}
+
+// PositionInput 职务表单。
+type PositionInput struct {
+	ID        int64
+	Name      string
+	Role      string
+	SortOrder int64
+	IsActive  bool
+}
+
+func Position(in Input) (any, error) {
+	v := New(in)
+	out := PositionInput{
+		ID:        v.ID("id"),
+		Name:      v.Raw("name"),
+		Role:      v.OneOf("role", "权限级别", "", "admin", "manager", "employee"),
+		SortOrder: v.IntRange("sort_order", "排序", 0, -999, 999),
+		IsActive:  v.Bool("is_active"),
+	}
+	lenBetween(v, "name", "职务名称", out.Name, 1, 30)
+	if out.Role == "" {
+		v.Fail("role", "请选择权限级别。")
+	}
 	return out, v.Err()
 }

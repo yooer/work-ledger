@@ -23,12 +23,12 @@
     </div>
     {{if .People}}<div class="table-responsive">
         <table class="table table-vcenter card-table">
-            <thead><tr><th>姓名</th><th>账号 / 工号</th><th>角色</th><th>部门</th><th>主管领导</th><th>联系方式</th><th>2FA</th><th>最后登录</th><th>状态</th><th class="w-1"></th></tr></thead>
+            <thead><tr><th>姓名</th><th>账号 / 工号</th><th>职务</th><th>部门</th><th>主管领导</th><th>联系方式</th><th>2FA</th><th>最后登录</th><th>状态</th><th class="w-1"></th></tr></thead>
             <tbody>
             {{range .People}}<tr>
                 <td><div class="d-flex align-items-center"><span class="avatar avatar-sm me-2 bg-primary-lt">{{first (str .name)}}</span><strong>{{.name}}</strong></div></td>
                 <td><div>{{.username}}</div><div class="small text-secondary">{{default "—" .employee_no}}</div></td>
-                <td>{{role .role}}</td>
+                <td>{{if .position_name}}{{.position_name}}{{else}}{{role .role}}{{end}}<div class="small text-secondary">{{roleLevel .role}}</div></td>
                 <td>{{dept .}}</td>
                 <td>{{default "—" .supervisor_name}}</td>
                 <td><div class="small">{{default "—" .phone}}</div><div class="small text-secondary">{{default "" .email}}</div></td>

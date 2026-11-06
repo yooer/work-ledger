@@ -40,9 +40,10 @@ var backupTables = []struct {
 	optional []string
 }{
 	{"departments", []string{"id", "name", "parent_id", "is_active", "sort_order", "created_at", "updated_at"}, nil},
+	{"positions", []string{"id", "name", "role", "is_active", "sort_order", "created_at", "updated_at"}, nil}, // Go 版新增（整表可选）
 	{"users", []string{"id", "username", "password_hash", "name", "employee_no", "role", "department_id", "phone", "email", "is_active",
 		"totp_secret", "totp_enabled", "totp_recovery_codes", "totp_last_used_step", "last_login_at", "created_at", "updated_at"},
-		[]string{"supervisor_id"}},
+		[]string{"supervisor_id", "position_id"}},
 	{"work_categories", []string{"id", "name", "is_customer_project", "is_active", "sort_order", "created_at", "updated_at"}, nil},
 	{"project_categories", []string{"id", "work_category_id", "name", "is_active", "sort_order", "created_at", "updated_at"}, nil},
 	{"work_records", []string{"id", "work_category_id", "project_category_id", "content", "work_at", "difficulty", "work_count",
@@ -54,9 +55,12 @@ var backupTables = []struct {
 	{"app_settings", []string{"name", "value", "updated_at"}, nil},
 }
 
+// optionalTables Go 版新增的整张表：PHP 版备份中没有，恢复时允许缺失。
+var optionalTables = map[string]bool{"positions": true}
+
 var deleteOrder = []string{"work_record_participants", "weekly_reports", "annual_reports", "period_reports", "work_records",
-	"project_categories", "work_categories", "users", "app_settings"}
-var insertOrder = []string{"users", "work_categories", "project_categories", "work_records", "work_record_participants",
+	"project_categories", "work_categories", "users", "positions", "app_settings"}
+var insertOrder = []string{"positions", "users", "work_categories", "project_categories", "work_records", "work_record_participants",
 	"weekly_reports", "annual_reports", "period_reports", "app_settings"}
 
 // tableCols 返回导出/写入使用的全部字段（必需字段 + 可选字段）。
@@ -357,6 +361,10 @@ func (s *Backup) Decode(raw []byte) (*backupData, error) {
 	for _, t := range backupTables {
 		rawTable, ok := top.Tables[t.name]
 		if !ok {
+			if optionalTables[t.name] {
+				data.Tables[t.name] = nil
+				continue
+			}
 			return nil, apperr.New("备份缺少数据表：" + t.name)
 		}
 		var rows []map[string]any
@@ -438,30 +446,24 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 				return err
 			}
 		}
-		if _, err := db.Exec(tx, "DELETE FROM departments WHERE parent_id IS NOT NULL"); err != nil {
+		// 多级部门：先解除上下级关系再整体删除，避免外键 RESTRICT
+		if _, err := db.Exec(tx, "UPDATE departments SET parent_id = NULL"); err != nil {
 			return err
 		}
-		if _, err := db.Exec(tx, "DELETE FROM departments WHERE parent_id IS NULL"); err != nil {
+		if _, err := db.Exec(tx, "DELETE FROM departments"); err != nil {
 			return err
 		}
-		var tops, children []map[string]any
-		for _, d := range data.Tables["departments"] {
-			if d["parent_id"] == nil {
-				tops = append(tops, d)
-			} else {
-				children = append(children, d)
-			}
-		}
-		if err := insertRows(tx, "departments", tops); err != nil {
-			return err
-		}
-		if err := insertRows(tx, "departments", children); err != nil {
+		if err := insertDepartmentsByLevel(tx, data.Tables["departments"]); err != nil {
 			return err
 		}
 		for _, t := range insertOrder {
 			if err := insertRows(tx, t, data.Tables[t]); err != nil {
 				return err
 			}
+		}
+		// PHP 版备份没有职务：按原角色对应预置职务
+		if err := ensurePositions(tx); err != nil {
+			return err
 		}
 		n, err := db.Int(tx, "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1 AND password_hash <> ''")
 		if err != nil {
@@ -479,6 +481,37 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 		restored[t.name] = len(data.Tables[t.name])
 	}
 	return restored, nil
+}
+
+// insertDepartmentsByLevel 按层级写入部门（上级先于下级），支持任意层级。
+// 上级不存在或成环的部门最后按顶级写入，保证恢复不中断。
+func insertDepartmentsByLevel(tx db.Q, rows []map[string]any) error {
+	done := map[string]bool{}
+	pending := rows
+	for len(pending) > 0 {
+		var batch, rest []map[string]any
+		for _, d := range pending {
+			if d["parent_id"] == nil || done[fmt.Sprint(d["parent_id"])] {
+				batch = append(batch, d)
+			} else {
+				rest = append(rest, d)
+			}
+		}
+		if len(batch) == 0 {
+			for _, d := range rest {
+				d["parent_id"] = nil
+			}
+			batch, rest = rest, nil
+		}
+		if err := insertRows(tx, "departments", batch); err != nil {
+			return err
+		}
+		for _, d := range batch {
+			done[fmt.Sprint(d["id"])] = true
+		}
+		pending = rest
+	}
+	return nil
 }
 
 func insertRows(tx db.Q, table string, rows []map[string]any) error {

@@ -115,6 +115,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 	}
 	_ = s.Settings.EnsureDefaults()
+	if err := s.Positions.EnsureDefaults(); err != nil {
+		return fmt.Errorf("职务初始化失败：%w", err)
+	}
 
 	h, err := Handler(cfg, s, log)
 	if err != nil {

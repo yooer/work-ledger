@@ -19,7 +19,7 @@
 {{define "org-node"}}<li>
     <a class="wl-org-card{{if not .Active}} wl-org-inactive{{end}}" href="/people/{{.ID}}/edit">
         <span class="wl-org-name">{{.Name}}{{if .EmployeeNo}} <small>{{.EmployeeNo}}</small>{{end}}</span>
-        <span class="wl-org-meta">{{role .Role}} · {{.Department}}{{if not .Active}} · 已停用{{end}}</span>
+        <span class="wl-org-meta">{{if .Position}}{{.Position}}{{else}}{{role .Role}}{{end}} · {{.Department}}{{if not .Active}} · 已停用{{end}}</span>
         {{if .TeamSize}}<span class="badge bg-primary-lt">下属 {{.TeamSize}} 人</span>{{end}}
     </a>
     {{if .Children}}<ul>{{range .Children}}{{template "org-node" .}}{{end}}</ul>{{end}}

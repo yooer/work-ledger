@@ -1,25 +1,26 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/org.css"}}">{{end}}
 {{define "content"}}<div class="card">
     <div class="card-header">
         <div>
             <h3 class="card-title">部门列表</h3>
-            <div class="card-subtitle">一级部门 + 二级子部门，最多两级。部门不提供删除，停用后不再出现在新选项中。</div>
+            <div class="card-subtitle">部门不限层级（如 分公司 / 部门 / 班组）。部门管理者可查看本部门及所有下级部门的台账。部门不提供删除，停用后不再出现在新选项中。</div>
         </div>
         <div class="card-actions"><a class="btn btn-primary" href="/departments/create">{{icon "plus"}}新增部门</a></div>
     </div>
     {{if .Departments}}<div class="table-responsive">
         <table class="table table-vcenter card-table">
-            <thead><tr><th>部门名称</th><th>层级</th><th>人员（启用/全部）</th><th>子部门</th><th>排序</th><th>状态</th><th class="w-1"></th></tr></thead>
+            <thead><tr><th>部门名称</th><th>层级</th><th>人员（启用/全部）</th><th>直接下级</th><th>排序</th><th>状态</th><th class="w-1"></th></tr></thead>
             <tbody>
             {{range .Departments}}<tr>
-                <td>{{if eq .depth 1}}<span class="text-secondary me-2">└</span>{{end}}<strong>{{.name}}</strong></td>
-                <td>{{if eq .depth 0}}<span class="badge bg-blue-lt">一级部门</span>{{else}}<span class="badge bg-azure-lt">二级子部门</span>{{end}}</td>
+                <td>{{range times .depth}}<span class="wl-dept-indent"></span>{{end}}{{if gt .depth 0}}<span class="text-secondary me-2">└</span>{{end}}<strong>{{.name}}</strong></td>
+                <td><span class="badge {{if eq .depth 0}}bg-blue-lt{{else}}bg-azure-lt{{end}}">{{add .depth 1}} 级</span></td>
                 <td>{{.active_user_count}} / {{.user_count}}</td>
-                <td>{{if eq .depth 0}}{{.child_count}}{{else}}—{{end}}</td>
+                <td>{{if gt .child_count 0}}{{.child_count}}{{else}}—{{end}}</td>
                 <td>{{.sort_order}}</td>
                 <td>{{if eq .is_active 1}}<span class="badge bg-success-lt">启用</span>{{else}}<span class="badge bg-secondary-lt">停用</span>{{end}}</td>
                 <td><a class="btn btn-sm btn-outline-primary" href="/departments/{{.id}}/edit">{{icon "edit"}}编辑</a></td>
             </tr>{{end}}
             </tbody>
         </table>
-    </div>{{else}}<div class="card-body">{{template "empty" "暂无部门，请先新增一级部门。"}}</div>{{end}}
+    </div>{{else}}<div class="card-body">{{template "empty" "暂无部门，请先新增部门。"}}</div>{{end}}
 </div>{{end}}

@@ -111,13 +111,13 @@ func (c *Ctx) RenderError(status int, title, message string) {
 	}
 }
 
-// DepartmentLabel 形如 "集客部 / 集客一组"。
+// DepartmentLabel 部门完整路径，形如 "分公司 / 集客部 / 一组"（查询需带 department_path）。
 func DepartmentLabel(u model.Row) string {
 	if u == nil || u.Str("department_name") == "" {
 		return "未分配部门"
 	}
-	if p := u.Str("parent_department_name"); p != "" {
-		return p + " / " + u.Str("department_name")
+	if p := u.Str("department_path"); p != "" {
+		return p
 	}
 	return u.Str("department_name")
 }
@@ -157,6 +157,22 @@ func (v *Views) funcs() template.FuncMap {
 				out = append(out, i)
 			}
 			return out
+		},
+		"roleLevel": func(role any) string { // 权限级别名称
+			switch model.ToStr(role) {
+			case "admin":
+				return "系统管理员"
+			case "manager":
+				return "部门管理者"
+			}
+			return "普通成员"
+		},
+		"times": func(n any) []int { // 用于按层级缩进
+			k := int(model.ToInt(n))
+			if k < 0 {
+				k = 0
+			}
+			return make([]int, min(k, 50))
 		},
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
@@ -246,7 +262,7 @@ var iconMap = map[string]string{
 	"warning": "alert-triangle", "chevron": "chevron-right", "backup": "database-export", "import": "file-import",
 	"export": "file-export", "shield": "shield-lock", "key": "key", "download": "download", "upload": "upload",
 	"refresh": "refresh", "trash": "trash", "info": "info-circle", "user": "user", "robot": "robot",
-	"org": "sitemap", "team": "users-group", "eraser": "eraser",
+	"org": "sitemap", "badge": "id-badge-2", "team": "users-group", "eraser": "eraser",
 }
 
 // Icon 输出 Tabler 图标。

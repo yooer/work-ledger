@@ -1,0 +1,35 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "css/categories.css"}}">{{end}}
+{{define "content"}}<div class="alert alert-info">
+    职务名称可以自由设置（如 分公司总经理、部门副经理、主管）。每个职务绑定一个<strong>权限级别</strong>，人员的权限由所任职务决定：
+    {{range $i, $r := .RoleLevels}}{{if $i}}；{{end}}<strong>{{$r.Label}}</strong>：{{$r.Hint}}{{end}}。
+    另外，任何人只要在人员资料中被设为别人的“主管领导”，就可以查看这些下属的台账。职务不提供删除，不再使用时请停用。
+</div>
+<div class="card">
+    <div class="card-header"><h3 class="card-title">{{icon "badge"}} 职务列表</h3></div>
+    <div class="card-body border-bottom">
+        <form class="row g-2 align-items-end" data-ajax data-url="/positions/ajax" data-action="save" novalidate>
+            <div class="col-md-4"><label class="form-label">新增职务名称</label><input class="form-control" type="text" name="name" placeholder="例如：班组长" maxlength="30" required></div>
+            <div class="col-md-3"><label class="form-label">权限级别</label>
+                <select class="form-select" name="role">{{range .RoleLevels}}<option value="{{.Value}}"{{if eq .Value "employee"}} selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+            <div class="col-md-2"><label class="form-label">排序</label><input class="form-control" type="number" name="sort_order" value="0" min="-999" max="999"></div>
+            <div class="col-md-1 pb-2"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label></div>
+            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">{{icon "plus"}}新增职务</button></div>
+        </form>
+    </div>
+    {{if .Positions}}<div class="table-responsive">
+        <table class="table table-vcenter card-table wl-edit-table">
+            <thead><tr><th>职务名称</th><th>权限级别</th><th>人员（启用/全部）</th><th>排序</th><th>状态</th><th class="w-1">保存</th></tr></thead>
+            <tbody>
+            {{$levels := .RoleLevels}}{{range .Positions}}{{$role := .role}}<tr>
+                <td><form id="pos-{{.id}}" data-ajax data-url="/positions/ajax" data-action="save" novalidate><input type="hidden" name="id" value="{{.id}}"></form>
+                    <input form="pos-{{.id}}" class="form-control form-control-sm" type="text" name="name" value="{{.name}}" maxlength="30" required aria-label="职务名称"></td>
+                <td><select form="pos-{{.id}}" class="form-select form-select-sm" name="role" aria-label="权限级别">{{range $levels}}<option value="{{.Value}}"{{if eq .Value $role}} selected{{end}}>{{.Label}}</option>{{end}}</select></td>
+                <td><a class="badge bg-secondary-lt" href="/people">{{.active_user_count}} / {{.user_count}}</a></td>
+                <td><input form="pos-{{.id}}" class="form-control form-control-sm wl-input-mini" type="number" name="sort_order" value="{{.sort_order}}" min="-999" max="999" aria-label="排序"></td>
+                <td><label class="form-check form-switch mb-0"><input form="pos-{{.id}}" class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq .is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label></td>
+                <td><button form="pos-{{.id}}" type="submit" class="btn btn-sm btn-outline-primary">保存</button></td>
+            </tr>{{end}}
+            </tbody>
+        </table>
+    </div>{{else}}<div class="card-body text-secondary">暂无职务。</div>{{end}}
+</div>{{end}}

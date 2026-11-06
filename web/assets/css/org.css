@@ -84,3 +84,9 @@
     border-color: var(--tblr-primary);
     text-decoration: none;
 }
+
+/* 部门列表：按层级缩进 */
+.wl-dept-indent {
+    display: inline-block;
+    width: 1.25rem;
+}

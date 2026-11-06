@@ -123,6 +123,9 @@ func Install(c *Core, opt InstallOptions) (*InstallResult, error) {
 			res.Notes = append(res.Notes, "已有部门或人员数据，跳过演示数据。")
 		}
 	}
+	if err := (&Positions{Core: c}).EnsureDefaults(); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

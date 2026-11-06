@@ -12,9 +12,9 @@
             <label class="form-label" for="d-parent">上级部门</label>
             <select class="form-select" id="d-parent" name="parent_id">
                 <option value="0">无（作为一级部门）</option>
-                {{$pid := .Old.parent_id}}{{range .Parents}}<option value="{{.id}}"{{if same .id $pid}} selected{{end}}>{{.name}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+                {{$pid := .Old.parent_id}}{{range .Parents}}<option value="{{.id}}"{{if same .id $pid}} selected{{end}}>{{.label}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
             </select>
-            <div class="form-hint">部门最多两级，只能选择一级部门作为上级；已有子部门的部门不能再设为子部门。</div>
+            <div class="form-hint">部门不限层级，可以选择任何部门作为上级；不能选择本部门或它的下级部门。</div>
         </div>
         <div class="row">
             <div class="col-sm-6 mb-3">

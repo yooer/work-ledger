@@ -4,7 +4,7 @@
     <div class="card mb-3">
         <div class="card-header"><h3 class="card-title">{{icon "download"}} 下载完整备份</h3></div>
         <div class="card-body">
-            <p class="text-secondary">备份包含全部 10 张业务表：用户（含密码哈希与 2FA）、部门、分类、台账、参与人员、周报、年度总结、时段总结和系统设置。<strong>不包含</strong>配置文件 .env、AI Key、日志和备份文件本身。格式与 PHP 版一致，两个版本可互相恢复。</p>
+            <p class="text-secondary">备份包含全部 11 张业务表：用户（含密码哈希与 2FA）、职务、部门、分类、台账、参与人员、周报、年度总结、时段总结和系统设置。<strong>不包含</strong>配置文件 .env、AI Key、日志和备份文件本身。PHP 版的备份可以在这里恢复（按原角色自动对应职务）；Go 版备份包含职务、多级部门等新信息，不再保证能恢复到 PHP 版。</p>
             <div class="btn-list">
                 <a class="btn btn-primary" href="/backup/download?format=gz">{{icon "download"}}下载压缩备份（.json.gz）</a>
                 <a class="btn btn-outline-primary" href="/backup/download?format=json">下载未压缩 JSON</a>
