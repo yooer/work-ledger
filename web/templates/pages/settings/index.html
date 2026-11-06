@@ -21,10 +21,11 @@
     </form>
 
     <form class="card mb-3" data-ajax data-url="/settings/ajax" data-action="save_permissions" novalidate>
-        <div class="card-header"><h3 class="card-title">领导权限</h3><span class="badge ms-auto {{if .LeaderCanEdit}}bg-success-lt{{else}}bg-secondary-lt{{end}}">{{if .LeaderCanEdit}}允许修改{{else}}只读{{end}}</span></div>
+        <div class="card-header"><h3 class="card-title">领导权限</h3><span class="badge ms-auto {{if or .LeaderCanEdit .LeaderCanDelete}}bg-success-lt{{else}}bg-secondary-lt{{end}}">{{if and .LeaderCanEdit .LeaderCanDelete}}可修改、可删除{{else if .LeaderCanEdit}}可修改{{else if .LeaderCanDelete}}可删除{{else}}只读{{end}}</span></div>
         <div class="card-body">
             <label class="form-check form-switch"><input class="form-check-input" type="checkbox" name="leader_can_edit" value="1"{{if .LeaderCanEdit}} checked{{end}}><span class="form-check-label">允许主管领导和部门经理修改下属台账</span></label>
-            <div class="form-hint">开启后，主管领导可以修改直接和间接下属的台账，部门经理可以修改分管部门（含子部门）的台账；记录人保持不变，“最后编辑用户”会记为修改人。关闭后，领导只能查看、导出和生成总结。台账一律不提供删除。</div>
+            <label class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="leader_can_delete" value="1"{{if .LeaderCanDelete}} checked{{end}}><span class="form-check-label">允许主管领导和部门经理删除下属台账</span></label>
+            <div class="form-hint">“下属台账”指主管领导的直接和间接下属创建的台账，以及部门经理分管部门（含子部门）的台账；下属只是参与人员、由他人创建的记录不在此列。修改时记录人保持不变，“最后编辑用户”记为修改人。删除不可撤销，系统日志会记录删除人和内容摘要，误删可用数据备份恢复。管理员和记录创建者本人始终可以修改、删除。</div>
         </div>
         <div class="card-footer text-end"><button type="submit" class="btn btn-primary">{{icon "check"}}保存</button></div>
     </form>

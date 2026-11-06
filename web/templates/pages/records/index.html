@@ -1,7 +1,7 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/records.css"}}">{{end}}
 {{define "content"}}{{$m := .Mode}}{{$f := .Filter}}
 {{if eq $m.Key "team"}}<div class="alert alert-info">团队范围：{{if .DeptLabel}}分管部门 <strong>{{.DeptLabel}}</strong>（含二级子部门，按台账创建时的部门归属统计）{{end}}{{if and .DeptLabel .SubordinateCount}}，以及{{end}}{{if .SubordinateCount}}直接和间接下属 <strong>{{.SubordinateCount}}</strong> 人{{end}}{{if not (or .DeptLabel .SubordinateCount)}}全部人员{{end}}。可以查看、导出{{if .LeaderCanEdit}}，并可修改团队成员的台账{{else}}；只能编辑自己创建的记录{{end}}。</div>{{end}}
-{{if eq $m.Key "mine"}}<div class="alert alert-info">这里只展示由你本人创建的工作记录。</div>{{end}}
+{{if eq $m.Key "mine"}}<div class="alert alert-info">这里展示你创建的工作记录，以及别人创建、把你列为参与人员的记录（标记“参与”，由创建者负责修改）。</div>{{end}}
 <div class="card mb-3 wl-filter-card">
     <div class="card-body">
         <form method="get" action="{{$m.BaseURL}}" class="row g-2 align-items-end">
@@ -47,7 +47,7 @@
             {{range .Result.Items}}<tr>
                 <td class="text-nowrap">{{dt (str .work_at)}}</td>
                 <td><div>{{.category_name}}</div>{{if .project_name}}<div class="small text-secondary">{{.project_name}}</div>{{end}}</td>
-                <td class="wl-table-content"><a href="/records/{{.id}}" class="text-reset">{{short (str .content) 80}}</a></td>
+                <td class="wl-table-content">{{if and (eq $m.Key "mine") (not (same .created_by $.User.id))}}<span class="badge bg-azure-lt me-1">参与</span>{{end}}<a href="/records/{{.id}}" class="text-reset">{{short (str .content) 80}}</a></td>
                 <td class="small">{{default "—" .participants_text}}</td>
                 <td>{{template "difficulty-badge" .difficulty}}</td>
                 <td>{{.work_count}}</td>

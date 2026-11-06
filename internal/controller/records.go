@@ -23,6 +23,7 @@ func (c *Controllers) registerRecords(app *web.App) {
 	app.Ajax("/records/ajax", web.Login, web.Actions{
 		"create": {Validate: validator.RecordCreate, Handle: c.createRecord},
 		"update": {Validate: validator.RecordUpdate, Handle: c.updateRecord},
+		"delete": {Validate: validator.ID, Handle: c.deleteRecord},
 	})
 }
 
@@ -48,7 +49,7 @@ func (c *Controllers) recordQuery(ctx *web.Ctx, mode string) (service.Scope, ser
 	f := service.RecordFilter{From: in.From, To: in.To, CategoryID: in.CategoryID, ProjectID: in.ProjectID, Q: in.Q}
 	switch mode {
 	case "mine":
-		f.CreatorID = ctx.UserID()
+		f.InvolvedIDs = []int64{ctx.UserID()} // 本人创建的 + 本人参与的
 		in.EmployeeID, in.DepartmentID = 0, 0
 	case "team":
 		if !sc.All && !sc.IsTeamScope() {
@@ -148,6 +149,7 @@ func (c *Controllers) recordShow(ctx *web.Ctx) error {
 	}
 	return ctx.Render("records/show", map[string]any{
 		"PageTitle": "工作详情", "Active": "my-records", "Record": rec, "CanEdit": c.S.Records.CanEditRecord(sc, rec, ctx.User),
+		"CanDelete": c.S.Records.CanDeleteRecord(sc, rec, ctx.User), "IsCreator": rec.Int("created_by") == ctx.UserID(),
 	})
 }
 
@@ -224,4 +226,32 @@ func (c *Controllers) updateRecord(ctx *web.Ctx, in any) (any, error) {
 		return nil, err
 	}
 	return web.Result{Message: "工作记录已更新。", Redirect: "/records/" + strconv.FormatInt(p.ID, 10), FlashOnRedirect: true}, nil
+}
+
+// deleteRecord 删除台账（二次确认在页面完成），并写审计日志。
+func (c *Controllers) deleteRecord(ctx *web.Ctx, in any) (any, error) {
+	p := in.(validator.IDInput)
+	sc, err := c.S.Core.ScopeFor(ctx.User)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := c.S.Records.Delete(sc, ctx.User, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	content := []rune(rec.Str("content"))
+	if len(content) > 60 {
+		content = append(content[:60], []rune("…")...)
+	}
+	c.S.Core.Log.Warn("work record deleted", "record_id", rec.Int("id"), "by_id", ctx.UserID(), "by", ctx.User.Str("name"),
+		"creator", rec.Str("creator_name"), "work_at", rec.Str("work_at"), "category", rec.Str("category_name"), "content", string(content))
+	back := "/my-records"
+	if rec.Int("created_by") != ctx.UserID() {
+		if ctx.IsAdmin() {
+			back = "/records"
+		} else {
+			back = "/team-records"
+		}
+	}
+	return web.Result{Message: "工作记录已删除。", Redirect: back, FlashOnRedirect: true}, nil
 }

@@ -27,7 +27,7 @@ func (c *Controllers) settingsPage(ctx *web.Ctx) error {
 		"AIBaseURL": cfg.AI.BaseURL, "AIModel": cfg.AI.Model, "AppURL": cfg.App.URL, "Timezone": cfg.App.Timezone,
 		"ListenAddr": cfg.App.ListenAddr, "Home": cfg.Paths.Home, "EnvFile": cfg.Paths.EnvFile, "DBPath": cfg.DB.SQLitePath,
 		"WeekStart": c.S.Settings.WeekStartDay(), "WeekEnd": c.S.Settings.WeekEndDay(), "CycleLabel": c.S.Settings.WeekCycleLabel(),
-		"Counts": counts, "LeaderCanEdit": c.S.Settings.LeaderCanEdit(), "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
+		"Counts": counts, "LeaderCanEdit": c.S.Settings.LeaderCanEdit(), "LeaderCanDelete": c.S.Settings.LeaderCanDelete(), "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
 	})
 }
 
@@ -41,13 +41,16 @@ func (c *Controllers) saveWeekCycle(ctx *web.Ctx, in any) (any, error) {
 
 func (c *Controllers) savePermissions(ctx *web.Ctx, in any) (any, error) {
 	p := in.(validator.PermissionsInput)
-	if err := c.S.Settings.SetLeaderCanEdit(p.LeaderCanEdit); err != nil {
+	if err := c.S.Settings.SetLeaderPermissions(p.LeaderCanEdit, p.LeaderCanDelete); err != nil {
 		return nil, err
 	}
-	msg := "已关闭：领导只能查看、导出和生成总结。"
-	if p.LeaderCanEdit {
-		msg = "已开启：主管领导和部门经理可以修改下属台账。"
+	onOff := func(b bool) string {
+		if b {
+			return "允许"
+		}
+		return "不允许"
 	}
+	msg := "领导权限已保存：修改下属台账 " + onOff(p.LeaderCanEdit) + "，删除下属台账 " + onOff(p.LeaderCanDelete) + "。"
 	return web.Result{Message: msg, Redirect: "/settings", FlashOnRedirect: true}, nil
 }
 

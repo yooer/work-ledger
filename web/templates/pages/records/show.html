@@ -8,6 +8,7 @@
             </div>
             <div class="card-actions btn-list">
                 {{if .CanEdit}}<a class="btn btn-primary" href="/records/{{$r.id}}/edit">{{icon "edit"}}编辑</a>{{end}}
+                {{if .CanDelete}}<button type="button" class="btn btn-outline-danger" data-ajax-click data-url="/records/ajax" data-action="delete" data-payload='{"id":{{$r.id}}}' data-confirm="确定删除这条工作记录吗？删除后不可撤销（可通过数据备份恢复），已生成的总结文本不受影响。">{{icon "trash"}}删除</button>{{end}}
                 <button type="button" class="btn btn-outline-secondary" data-print>{{icon "print"}}打印</button>
             </div>
         </div>
@@ -36,7 +37,7 @@
             </dl>
         </div>
     </div>
-    <div class="alert alert-info mt-3 small">台账记录不提供删除，以保证周报和年度统计有据可查。如内容有误，请编辑修正。</div>
+    {{if not .IsCreator}}{{if not .CanEdit}}<div class="alert alert-info mt-3 small">你是这条记录的参与人员或查看者，只有记录创建者{{if not .IsAdmin}}（或有权限的管理人员）{{end}}可以修改。</div>{{end}}{{end}}
 </div>
 </div>{{end}}
 {{define "scripts"}}<script>document.querySelectorAll('[data-print]').forEach(function (b) { b.addEventListener('click', function () { window.print(); }); });</script>{{end}}

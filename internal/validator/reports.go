@@ -143,11 +143,11 @@ func WeeklyExport(in Input) (WeeklyExportInput, error) {
 }
 
 // PermissionsInput 领导权限设置。
-type PermissionsInput struct{ LeaderCanEdit bool }
+type PermissionsInput struct{ LeaderCanEdit, LeaderCanDelete bool }
 
 func Permissions(in Input) (any, error) {
 	v := New(in)
-	return PermissionsInput{LeaderCanEdit: v.Bool("leader_can_edit")}, v.Err()
+	return PermissionsInput{LeaderCanEdit: v.Bool("leader_can_edit"), LeaderCanDelete: v.Bool("leader_can_delete")}, v.Err()
 }
 
 // WeekCycleInput 周报周期设置。

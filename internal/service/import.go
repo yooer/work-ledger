@@ -80,9 +80,9 @@ var importAliases = []struct {
 	{"work_count", []string{"次数", "工作次数", "项目次数", "workcount", "count"}},
 	{"project", []string{"子分类", "二级分类", "集客分类", "集客项目", "项目分类", "集客业务分类", "projectcategory", "subcategory", "project"}},
 	{"creator", []string{"记录人", "记录创建者", "创建人", "创建者", "填报人", "录入人", "记录者", "员工姓名", "姓名", "creator", "createdby"}},
-	{"created_at", []string{"记录创建时间", "创建时间", "createdat", "createdatetime"}},
-	{"updated_at", []string{"最后编辑时间", "更新时间", "updatedat", "updatedatetime"}},
-	{"editor", []string{"最后编辑用户", "最后编辑人", "编辑人", "editor", "lasteditor"}},
+	{"created_at", []string{"记录创建时间", "创建时间", "创建于", "createdat", "createdatetime"}},
+	{"updated_at", []string{"最后编辑时间", "最后修改时间", "更新时间", "修改时间", "lasteditedat", "lastmodifiedat", "updatedat", "updatedatetime"}},
+	{"editor", []string{"最后编辑用户", "最后编辑人", "最后修改者", "最后修改人", "编辑人", "修改人", "editor", "lasteditor", "lastmodifiedby"}},
 	{"department", []string{"所属部门", "部门", "department"}},
 	{"id", []string{"记录id", "id", "recordid"}},
 }

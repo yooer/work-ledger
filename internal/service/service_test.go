@@ -148,7 +148,7 @@ func TestManagerScopeAndEditRules(t *testing.T) {
 	wangwu := userByName(t, s, "wangwu")
 	wsc, _ := s.Core.ScopeFor(wangwu)
 	own, _ := s.Records.List(wsc, RecordFilter{}, 1, 50)
-	if own.Total != 1 {
+	if own.Total != 3 { // 本人创建 1 条 + 作为参与人员 2 条
 		t.Fatalf("employee sees %d", own.Total)
 	}
 	// 经理编辑本部门他人记录：默认允许（领导可修改下属台账开关默认开启）
@@ -172,9 +172,10 @@ func TestManagerScopeAndEditRules(t *testing.T) {
 	if e, ok := apperr.As(err); !ok || e.Status != 403 {
 		t.Fatalf("expected 403 with switch off, got %v", err)
 	}
-	// 员工查看他人记录 → 404
-	if _, err := s.Records.Find(wsc, other.Int("id")); err == nil {
-		t.Fatal("employee should not see others' record")
+	// 员工查看与自己无关的他人记录 → 404（经理创建、王五未参与的“内部管理”）
+	unrelated, _ := db.Int(s.Core.DB, "SELECT id FROM work_records WHERE created_by = ? LIMIT 1", manager.Int("id"))
+	if _, err := s.Records.Find(wsc, unrelated); err == nil {
+		t.Fatal("employee should not see unrelated record")
 	}
 	// 生成范围：经理只能选择本部门
 	if _, err := s.Core.ResolveTarget(manager, "", wangwu.Int("department_id")); err == nil {
@@ -655,5 +656,106 @@ func TestBackupRoundTripWithSupervisorsAndTeamReports(t *testing.T) {
 	n, _ := db.Int(s.Core.DB, "SELECT COUNT(*) FROM weekly_reports WHERE team_leader_id = ?", wangwu.Int("id"))
 	if n != 1 {
 		t.Fatalf("team report after restore = %d", n)
+	}
+}
+
+func TestParticipantVisibilityAndDelete(t *testing.T) {
+	s, _ := newTestServices(t)
+	admin := userByName(t, s, "admin")
+	wangwu := userByName(t, s, "wangwu")
+	lisi := userByName(t, s, "lisi")
+	zhangsan := userByName(t, s, "zhangsan")
+	// 李四创建、王五参与的记录
+	recID, _ := db.Int(s.Core.DB, `SELECT r.id FROM work_records r JOIN work_record_participants p ON p.work_record_id = r.id
+		WHERE r.created_by = ? AND p.user_id = ? LIMIT 1`, lisi.Int("id"), wangwu.Int("id"))
+	if recID == 0 {
+		t.Fatal("demo data: expected a record by lisi with wangwu participating")
+	}
+	wsc, _ := s.Core.ScopeFor(wangwu)
+	// 我的台账（本人创建 + 本人参与）
+	mine, _ := s.Records.List(wsc, RecordFilter{InvolvedIDs: []int64{wangwu.Int("id")}}, 1, 50)
+	if mine.Total != 3 {
+		t.Fatalf("my records = %d", mine.Total)
+	}
+	rec, err := s.Records.Find(wsc, recID)
+	if err != nil {
+		t.Fatalf("participant should view record: %v", err)
+	}
+	if s.Records.CanEditRecord(wsc, rec, wangwu) || s.Records.CanDeleteRecord(wsc, rec, wangwu) {
+		t.Fatal("participant must not edit or delete")
+	}
+	if _, err := s.Records.Delete(wsc, wangwu, recID); err == nil {
+		t.Fatal("participant delete should be rejected")
+	}
+	// 个人周报：本人创建 + 本人参与
+	data, err := s.Weekly.Data("2026-10-26", "2026-11-01", ReportTarget{EmployeeID: wangwu.Int("id")}, true, 100)
+	if err != nil || data.Summary.RecordCount != 3 {
+		t.Fatalf("personal weekly = %d %v", data.Summary.RecordCount, err)
+	}
+	// 团队：王五是张三的主管；张三参与、王五创建的不会重复；李四创建、张三参与的记录计入团队
+	setSupervisor(t, s, "zhangsan", wangwu)
+	wangwu = userByName(t, s, "wangwu")
+	tgt, _ := s.Core.ResolveTarget(wangwu, "team", 0)
+	team, _ := s.Weekly.Data("2026-10-26", "2026-11-01", tgt, true, 100)
+	ids := map[int64]bool{}
+	for _, r := range team.Records {
+		if ids[r.ID] {
+			t.Fatal("team report has duplicate record")
+		}
+		ids[r.ID] = true
+	}
+	n, _ := db.Int(s.Core.DB, `SELECT COUNT(DISTINCT r.id) FROM work_records r LEFT JOIN work_record_participants p ON p.work_record_id = r.id
+		WHERE r.created_by IN (?, ?) OR p.user_id IN (?, ?)`, wangwu.Int("id"), zhangsan.Int("id"), wangwu.Int("id"), zhangsan.Int("id"))
+	if int64(team.Summary.RecordCount) != n {
+		t.Fatalf("team weekly = %d, want %d", team.Summary.RecordCount, n)
+	}
+	// 领导删除下属创建的台账：开关默认关闭 → 拒绝；开启后允许
+	wsc, _ = s.Core.ScopeFor(wangwu)
+	zsRec, _ := db.Int(s.Core.DB, "SELECT id FROM work_records WHERE created_by = ? LIMIT 1", zhangsan.Int("id"))
+	if _, err := s.Records.Delete(wsc, wangwu, zsRec); err == nil {
+		t.Fatal("leader delete should be off by default")
+	}
+	if err := s.Settings.SetLeaderPermissions(true, true); err != nil {
+		t.Fatal(err)
+	}
+	// 领导不能删除团队外的人创建、下属只是参与的记录
+	if _, err := s.Records.Delete(wsc, wangwu, recID); err == nil {
+		t.Fatal("leader must not delete outsider's record")
+	}
+	if _, err := s.Records.Delete(wsc, wangwu, zsRec); err != nil {
+		t.Fatalf("leader delete with switch on: %v", err)
+	}
+	if c, _ := db.Int(s.Core.DB, "SELECT COUNT(*) FROM work_record_participants WHERE work_record_id = ?", zsRec); c != 0 {
+		t.Fatal("participants should be deleted with record")
+	}
+	// 创建者可以删除自己的；管理员可以删除任何
+	lsc, _ := s.Core.ScopeFor(lisi)
+	if _, err := s.Records.Delete(lsc, lisi, recID); err != nil {
+		t.Fatalf("creator delete: %v", err)
+	}
+	asc, _ := s.Core.ScopeFor(admin)
+	anyID, _ := db.Int(s.Core.DB, "SELECT id FROM work_records LIMIT 1")
+	if _, err := s.Records.Delete(asc, admin, anyID); err != nil {
+		t.Fatalf("admin delete: %v", err)
+	}
+}
+
+func TestImportAuditColumns(t *testing.T) {
+	s, _ := newTestServices(t)
+	admin := userByName(t, s, "admin")
+	csv := "\uFEFF工作分类,工作内容,日期,参与人员,难易度,次数,Creator,创建于,Last editor,Last edited at\n" +
+		"内部管理,导入审计字段测试,2026-03-02 09:30,张三,2,1,张三,2026-03-02 18:00:05,李四,2026/03/05 08:15\n"
+	rows, _, err := s.Import.Parse([]byte(csv), "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Import.Import(rows, ImportOptions{DefaultCreatorID: admin.Int("id")})
+	if err != nil || res.Imported != 1 {
+		t.Fatalf("import: %+v %v", res, err)
+	}
+	r, _ := db.One(s.Core.DB, `SELECT r.created_at, r.updated_at, cu.name AS creator, eu.name AS editor FROM work_records r
+		JOIN users cu ON cu.id = r.created_by JOIN users eu ON eu.id = r.updated_by WHERE r.content = '导入审计字段测试'`)
+	if r.Str("creator") != "张三" || r.Str("editor") != "李四" || r.Str("created_at") != "2026-03-02 18:00:05" || r.Str("updated_at") != "2026-03-05 08:15:00" {
+		t.Fatalf("audit fields = %v", r)
 	}
 }

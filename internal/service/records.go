@@ -8,7 +8,7 @@ import (
 	"work-ledger/internal/timeutil"
 )
 
-// Records 台账查询与写入（不提供物理删除）。
+// Records 台账查询、写入与删除。
 type Records struct {
 	*Core
 	Settings *Settings
@@ -20,10 +20,9 @@ type RecordFilter struct {
 	To           string
 	CategoryID   int64
 	ProjectID    int64
-	CreatorID    int64   // “我的台账”固定为本人
+	InvolvedIDs  []int64 // 由这些人创建或这些人参与（我的台账 = 本人；团队 = 主管 + 全部下属）
 	EmployeeID   int64   // 管理员/经理按记录人筛选
 	DepartmentID int64   // 按部门快照（含子部门）筛选
-	CreatorIDs   []int64 // 团队：记录人属于这些人（主管领导 + 全部下属）
 	Q            string
 }
 
@@ -59,19 +58,14 @@ func (s *Records) where(sc Scope, f RecordFilter) (string, []any, error) {
 		conds = append(conds, "r.project_category_id = ?")
 		args = append(args, f.ProjectID)
 	}
-	if f.CreatorID > 0 {
-		conds = append(conds, "r.created_by = ?")
-		args = append(args, f.CreatorID)
+	if len(f.InvolvedIDs) > 0 {
+		cond, a := InvolvedSQL("r", f.InvolvedIDs)
+		conds = append(conds, cond)
+		args = append(args, a...)
 	}
 	if f.EmployeeID > 0 {
 		conds = append(conds, "r.created_by = ?")
 		args = append(args, f.EmployeeID)
-	}
-	if len(f.CreatorIDs) > 0 {
-		conds = append(conds, "r.created_by IN ("+db.Placeholders(len(f.CreatorIDs))+")")
-		for _, id := range f.CreatorIDs {
-			args = append(args, id)
-		}
 	}
 	if f.DepartmentID > 0 {
 		ids, err := descendantIDs(s.DB, f.DepartmentID)
@@ -340,6 +334,29 @@ func (s *Records) Update(sc Scope, user Row, id int64, in RecordInput) error {
 // activeSubCount 某一级分类下启用的子分类数量。
 func activeSubCount(q db.Q, categoryID int64) (int64, error) {
 	return db.Int(q, "SELECT COUNT(*) FROM project_categories WHERE work_category_id = ? AND is_active = 1", categoryID)
+}
+
+// Delete 删除台账（连同参与人员关系），返回被删除的记录供审计日志使用。
+// 权限：管理员、创建者；设置允许时主管领导/部门经理可删除所管辖的台账。
+func (s *Records) Delete(sc Scope, user Row, id int64) (Row, error) {
+	existing, err := s.Find(sc, id)
+	if err != nil {
+		return nil, err
+	}
+	if !s.CanDeleteRecord(sc, existing, user) {
+		return nil, apperr.Forbidden("你没有删除这条工作记录的权限。")
+	}
+	err = s.DB.Tx(func(tx db.Q) error {
+		if _, err := db.Exec(tx, "DELETE FROM work_record_participants WHERE work_record_id = ?", id); err != nil {
+			return err
+		}
+		_, err := db.Exec(tx, "DELETE FROM work_records WHERE id = ?", id)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return existing, nil
 }
 
 func replaceParticipants(tx db.Q, recordID int64, ids []int64) error {

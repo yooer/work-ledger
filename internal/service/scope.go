@@ -7,10 +7,10 @@ import (
 // Scope 是当前用户可查看的台账范围，所有列表/详情/导出/报告共用。
 //   - 系统管理员：全部
 //   - 部门经理：本人创建的 + 本部门及其二级子部门（按台账创建时的部门快照 department_id）
-//   - 主管领导（任何角色，只要有下属）：另加所有直接、间接下属创建的台账
-//   - 员工：仅本人创建
+//   - 主管领导（任何角色，只要有下属）：另加所有直接、间接下属创建或参与的台账
+//   - 员工：本人创建的 + 本人作为参与人员的
 //
-// 部门范围与下属范围取并集。
+// 部门范围与下属范围取并集；“本人 / 下属”范围同时包含其作为参与人员的台账（只能查看，编辑仍按创建者判断）。
 type Scope struct {
 	All     bool
 	UserID  int64
@@ -63,19 +63,25 @@ func subordinateIDs(q db.Q, userID int64) ([]int64, error) {
 	return ids, nil
 }
 
+// InvolvedSQL 台账由 ids 中的人创建，或 ids 中的人是参与人员。
+func InvolvedSQL(alias string, ids []int64) (string, []any) {
+	ph := db.Placeholders(len(ids))
+	args := make([]any, 0, len(ids)*2)
+	for i := 0; i < 2; i++ {
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+	return "(" + alias + ".created_by IN (" + ph + ") OR EXISTS (SELECT 1 FROM work_record_participants scp WHERE scp.work_record_id = " +
+		alias + ".id AND scp.user_id IN (" + ph + ")))", args
+}
+
 // SQL 生成可见范围条件。
 func (sc Scope) SQL(alias string) (string, []any) {
 	if sc.All {
 		return "1 = 1", nil
 	}
-	cond := alias + ".created_by = ?"
-	args := []any{sc.UserID}
-	if len(sc.UserIDs) > 0 {
-		cond += " OR " + alias + ".created_by IN (" + db.Placeholders(len(sc.UserIDs)) + ")"
-		for _, id := range sc.UserIDs {
-			args = append(args, id)
-		}
-	}
+	cond, args := InvolvedSQL(alias, append([]int64{sc.UserID}, sc.UserIDs...))
 	if len(sc.DeptIDs) > 0 {
 		cond += " OR " + alias + ".department_id IN (" + db.Placeholders(len(sc.DeptIDs)) + ")"
 		for _, id := range sc.DeptIDs {
@@ -117,6 +123,15 @@ func containsID(list []int64, id int64) bool {
 		}
 	}
 	return false
+}
+
+// CanDeleteRecord 管理员、记录创建者可以删除；系统设置允许时，主管领导/部门经理也可以删除所管辖的台账。
+// 仅作为参与人员的人不能删除。
+func (s *Records) CanDeleteRecord(sc Scope, record, user Row) bool {
+	if user.Str("role") == "admin" || record.Int("created_by") == user.Int("id") {
+		return true
+	}
+	return s.Settings.LeaderCanDelete() && sc.LeadsRecord(record)
 }
 
 // CanEditRecord 管理员、记录创建者可以编辑；系统设置允许时，主管领导/部门经理也可以编辑所管辖的台账。

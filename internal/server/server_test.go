@@ -253,3 +253,36 @@ func TestClearDataAjax(t *testing.T) {
 		t.Fatalf("records after clear = %d lines", n)
 	}
 }
+
+func TestParticipantListAndDeleteAjax(t *testing.T) {
+	srv, demo := setup(t)
+	emp := login(t, srv, "wangwu", demo)
+	_, page := emp.get("/my-records")
+	if !strings.Contains(page, ">参与</span>") || !strings.Contains(page, "共 3 条记录") {
+		t.Fatalf("my records should include participated records with badge")
+	}
+	// 参与记录：详情可看、无编辑/删除按钮，删除请求被拒绝
+	m := regexp.MustCompile(`<span class="badge bg-azure-lt me-1">参与</span><a href="/records/(\d+)"`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("participated record link not found")
+	}
+	code, detail := emp.get("/records/" + m[1])
+	if code != 200 || strings.Contains(detail, `data-action="delete"`) || strings.Contains(detail, "/edit\"") {
+		t.Fatalf("participant detail: %d", code)
+	}
+	if code, _ := emp.post("/records/ajax", "application/json", `{"action":"delete","id":`+m[1]+`}`, true); code != 403 {
+		t.Fatalf("participant delete = %d", code)
+	}
+	// 创建者删除自己的记录
+	own := regexp.MustCompile(`<td class="wl-table-content"><a href="/records/(\d+)"`).FindStringSubmatch(page)
+	if own == nil {
+		t.Fatal("own record not found")
+	}
+	emp.get("/records/" + own[1])
+	if code, body := emp.post("/records/ajax", "application/json", `{"action":"delete","id":`+own[1]+`}`, true); code != 200 || !strings.Contains(body, "已删除") {
+		t.Fatalf("creator delete: %d %s", code, body)
+	}
+	if code, _ := emp.get("/records/" + own[1]); code != 404 {
+		t.Fatalf("deleted record = %d", code)
+	}
+}

@@ -226,8 +226,10 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 		if e == nil {
 			return nil, apperr.New("指定的员工不存在。")
 		}
-		conds = append(conds, "r.created_by = ?")
-		args = append(args, sp.EmployeeID)
+		// 个人：本人创建的 + 本人参与的
+		cond, a := InvolvedSQL("r", []int64{sp.EmployeeID})
+		conds = append(conds, cond)
+		args = append(args, a...)
 		id := sp.EmployeeID
 		name := e.Str("name")
 		scope.EmployeeID, scope.EmployeeName, scope.EmployeeNo = &id, &name, strPtr(e["employee_no"])
@@ -249,11 +251,10 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 		if err != nil {
 			return nil, err
 		}
-		members := append([]int64{sp.TeamLeaderID}, subs...)
-		conds = append(conds, "r.created_by IN ("+db.Placeholders(len(members))+")")
-		for _, id := range members {
-			args = append(args, id)
-		}
+		// 团队：成员创建的 + 成员参与的（按记录去重）
+		cond, a := InvolvedSQL("r", append([]int64{sp.TeamLeaderID}, subs...))
+		conds = append(conds, cond)
+		args = append(args, a...)
 		id := sp.TeamLeaderID
 		scope.TeamLeaderID = &id
 		parts = append(parts, leader.Str("name")+"的团队（含下属 "+strconv.Itoa(len(subs))+" 人）")
@@ -691,13 +692,16 @@ func (c *Core) TargetRecords(user Row, t ReportTarget, from, to string) (Scope, 
 	if err != nil {
 		return sc, RecordFilter{}, err
 	}
-	f := RecordFilter{From: from, To: to, DepartmentID: t.DepartmentID, EmployeeID: t.EmployeeID}
+	f := RecordFilter{From: from, To: to, DepartmentID: t.DepartmentID}
+	if t.EmployeeID > 0 {
+		f.InvolvedIDs = []int64{t.EmployeeID}
+	}
 	if t.TeamLeaderID > 0 {
 		subs, err := subordinateIDs(c.DB, t.TeamLeaderID)
 		if err != nil {
 			return sc, f, err
 		}
-		f.CreatorIDs = append([]int64{t.TeamLeaderID}, subs...)
+		f.InvolvedIDs = append([]int64{t.TeamLeaderID}, subs...)
 	}
 	return sc, f, nil
 }
