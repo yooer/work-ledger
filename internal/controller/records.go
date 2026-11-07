@@ -103,11 +103,7 @@ func (c *Controllers) recordsPage(ctx *web.Ctx, mode string) error {
 	if err != nil {
 		return err
 	}
-	cats, err := c.S.Categories.Work(false)
-	if err != nil {
-		return err
-	}
-	projects, err := c.S.Categories.Projects(0, false)
+	cats, projects, err := c.S.Categories.FilterOptions(sc, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -184,7 +180,11 @@ func (c *Controllers) recordForm(ctx *web.Ctx) error {
 			}
 		}
 	}
-	cats, projects, people, err := c.S.Records.FormOptions(model.ToInt(old["work_category_id"]), model.ToInt(old["project_category_id"]), selected)
+	deptID := ctx.User.Int("department_id")
+	if rec != nil {
+		deptID = rec.Int("department_id")
+	}
+	cats, projects, people, err := c.S.Records.FormOptions(deptID, model.ToInt(old["work_category_id"]), model.ToInt(old["project_category_id"]), selected)
 	if err != nil {
 		return err
 	}

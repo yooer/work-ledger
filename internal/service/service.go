@@ -37,6 +37,7 @@ type Services struct {
 	Import     *Importer
 	Export     *Exporter
 	Backup     *Backup
+	AutoBackup *AutoBackup
 }
 
 func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
@@ -59,6 +60,8 @@ func New(d *db.DB, cfg *config.Config, log *slog.Logger) *Services {
 	s.Import = &Importer{Core: core}
 	s.Export = &Exporter{Core: core, Records: s.Records}
 	s.Backup = &Backup{Core: core}
+	s.AutoBackup = &AutoBackup{Core: core, Settings: s.Settings, Backup: s.Backup}
+	s.Scheduler.AutoBackup = s.AutoBackup
 	return s
 }
 

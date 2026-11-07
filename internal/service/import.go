@@ -591,7 +591,7 @@ func (s *Importer) importRow(tx db.Q, row ImportRow, opt ImportOptions, defCreat
 	if projectName != "" && utf8.RuneCountInString(projectName) > 100 {
 		return false, rowFail("子分类名称超过 100 个字符。")
 	}
-	cat, err := s.resolveCategory(tx, categoryName, projectName != "", opt.AutoCreateCategories, res)
+	cat, err := s.resolveCategory(tx, categoryName, creator.Int("department_id"), projectName != "", opt.AutoCreateCategories, res)
 	if err != nil {
 		return false, err
 	}
@@ -679,17 +679,64 @@ func (s *Importer) importRow(tx db.Q, row ImportRow, opt ImportOptions, defCreat
 	return false, nil
 }
 
-func (s *Importer) resolveCategory(tx db.Q, name string, customer, autoCreate bool, res *ImportResult) (Row, error) {
-	cat, err := db.One(tx, "SELECT * FROM work_categories WHERE name = ? LIMIT 1", name)
-	if err != nil || cat != nil {
-		return cat, err
+// categoryWithDept 匹配“名称（部门）”写法（导出文件中同名分类会带部门名）。
+var categoryWithDept = regexp.MustCompile(`^(.+)（([^（）]+)）$`)
+
+// resolveCategory 按名称在记录人部门可用的分类中查找（本部门 + 下级部门 + 未指定部门的分类）。
+// 匹配到多个时优先记录人本部门的；仍无法确定则报错，提示用“名称（部门）”注明。
+// 找不到且允许自动补充时，在记录人所在部门下新建。
+func (s *Importer) resolveCategory(tx db.Q, name string, deptID int64, customer, autoCreate bool, res *ImportResult) (Row, error) {
+	const q = `SELECT wc.*, d.name AS department_name FROM work_categories wc LEFT JOIN departments d ON d.id = wc.department_id`
+	cands, err := db.All(tx, q+" WHERE wc.name = ? ORDER BY wc.id", name)
+	if err != nil {
+		return nil, err
+	}
+	if len(cands) == 0 {
+		if m := categoryWithDept.FindStringSubmatch(name); m != nil {
+			if cands, err = db.All(tx, q+" WHERE wc.name = ? AND d.name = ? ORDER BY wc.id", strings.TrimSpace(m[1]), strings.TrimSpace(m[2])); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if len(cands) > 0 {
+		ids, all, err := categoryDeptScope(tx, deptID)
+		if err != nil {
+			return nil, err
+		}
+		var usable, own []Row
+		for _, c := range cands {
+			if categoryUsable(c, ids, all) {
+				usable = append(usable, c)
+				if deptID > 0 && c.Int("department_id") == deptID {
+					own = append(own, c)
+				}
+			}
+		}
+		switch {
+		case len(usable) == 1:
+			return usable[0], nil
+		case len(own) == 1:
+			return own[0], nil
+		case len(usable) == 0:
+			return nil, rowFail("工作分类“%s”不属于记录人所在部门。", name)
+		default:
+			names := make([]string, 0, len(usable))
+			for _, c := range usable {
+				d := c.Str("department_name")
+				if d == "" {
+					d = "未指定部门"
+				}
+				names = append(names, d)
+			}
+			return nil, rowFail("工作分类“%s”有多个同名分类（%s），请写成“%s（部门名）”。", name, strings.Join(names, "、"), name)
+		}
 	}
 	if !autoCreate {
 		return nil, rowFail("工作分类不存在：%s", name)
 	}
 	ts := now()
-	id, err := db.Insert(tx, "INSERT INTO work_categories (name, is_customer_project, is_active, sort_order, created_at, updated_at) VALUES (?, ?, 1, 500, ?, ?)",
-		name, boolInt(customer), ts, ts)
+	id, err := db.Insert(tx, "INSERT INTO work_categories (name, department_id, is_customer_project, is_active, sort_order, created_at, updated_at) VALUES (?, ?, ?, 1, 500, ?, ?)",
+		name, nullInt(deptID), boolInt(customer), ts, ts)
 	if err != nil {
 		return nil, err
 	}

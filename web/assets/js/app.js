@@ -246,8 +246,31 @@
         });
     }
 
+    // copy 复制文本：HTTPS/localhost 用 Clipboard API，HTTP 访问时退回 execCommand('copy')。
+    function copy(text, okMessage) {
+        const ok = () => toast('success', okMessage || '已复制到剪贴板');
+        const fallback = () => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.className = 'wl-copy-buffer';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            let done = false;
+            try { done = document.execCommand('copy'); } catch (e) { done = false; }
+            document.body.removeChild(ta);
+            if (done) ok(); else toast('error', '浏览器不允许自动复制，请手动选择内容后按 Ctrl+C 复制。');
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(ok, fallback);
+        } else {
+            fallback();
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => { initTom(document); initDatepicker(document); });
     if (document.readyState !== 'loading') { initTom(document); initDatepicker(document); }
 
-    window.WL = { api, upload, toast, serialize, escapeHtml, initTom, initDatepicker, showErrors, clearErrors };
+    window.WL = { api, upload, toast, copy, serialize, escapeHtml, initTom, initDatepicker, showErrors, clearErrors };
 })();

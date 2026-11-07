@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"regexp"
+	"strings"
 	"unicode/utf8"
 
 	"work-ledger/internal/timeutil"
@@ -139,4 +141,52 @@ func Restore(in Input) (any, error) {
 		v.Fail("confirm_text", "请输入“恢复”两个字以确认。")
 	}
 	return RestoreInput{}, v.Err()
+}
+
+// AutoBackupInput 每日自动备份与 FTP 设置。FTPPassword 为空表示不修改已保存的密码。
+type AutoBackupInput struct {
+	Enabled     bool
+	Time        string
+	KeepLocal   int
+	KeepFTP     int
+	FTPHost     string
+	FTPPort     int
+	FTPUser     string
+	FTPPassword string
+	FTPDir      string
+	FTPTLS      bool
+}
+
+var ftpHostRe = regexp.MustCompile(`^[A-Za-z0-9._:\[\]-]+$`)
+
+func AutoBackup(in Input) (any, error) {
+	v := New(in)
+	out := AutoBackupInput{
+		Enabled:     v.Bool("auto_backup_enabled"),
+		Time:        v.Raw("auto_backup_time"),
+		KeepLocal:   int(v.IntRange("keep_local", "本地保留份数", 7, 0, 3650)),
+		KeepFTP:     int(v.IntRange("keep_remote", "FTP 保留份数", 30, 0, 3650)),
+		FTPHost:     v.Str("ftp_host", "FTP 地址", 255),
+		FTPPort:     int(v.IntRange("ftp_port", "端口", 21, 1, 65535)),
+		FTPUser:     v.Str("ftp_user", "用户名", 128),
+		FTPPassword: v.RawKeep("ftp_password"),
+		FTPDir:      v.Str("ftp_dir", "远程目录", 255),
+		FTPTLS:      v.Bool("ftp_tls"),
+	}
+	if !hhmm.MatchString(out.Time) {
+		v.Fail("auto_backup_time", "时间格式应为 HH:MM（24 小时制）。")
+	}
+	if out.FTPHost != "" && !ftpHostRe.MatchString(out.FTPHost) {
+		v.Fail("ftp_host", "只填写服务器域名或 IP，不要带 ftp:// 和路径。")
+	}
+	if len(out.FTPPassword) > 256 || strings.ContainsAny(out.FTPPassword, "\r\n") {
+		v.Fail("ftp_password", "密码过长或包含换行。")
+	}
+	if strings.ContainsAny(out.FTPUser, "\r\n") {
+		v.Fail("ftp_user", "用户名不能包含换行。")
+	}
+	if strings.ContainsAny(out.FTPDir, "\r\n") || strings.Contains(out.FTPDir, "..") {
+		v.Fail("ftp_dir", "远程目录不能包含换行或“..”。")
+	}
+	return out, v.Err()
 }

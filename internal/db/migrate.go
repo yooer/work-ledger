@@ -72,6 +72,28 @@ func (d *DB) Migrate() ([]string, error) {
 		}
 	}
 
+	// Go 版新增：工作分类所属部门（NULL = 升级遗留的“未指定部门”，所有部门可用）。
+	// 名称改为“同一部门内不重名”，替换原来的全局唯一索引。
+	catCols, err := d.columns("work_categories")
+	if err != nil {
+		return notes, err
+	}
+	if !catCols["department_id"] {
+		if _, err := d.Exec("ALTER TABLE work_categories ADD COLUMN department_id INTEGER NULL REFERENCES departments(id) ON DELETE RESTRICT"); err != nil {
+			return notes, err
+		}
+		notes = append(notes, "已补充 work_categories.department_id 字段。")
+	}
+	for _, stmt := range []string{
+		"DROP INDEX IF EXISTS ux_work_categories_name",
+		"CREATE UNIQUE INDEX IF NOT EXISTS ux_work_categories_dept_name ON work_categories(COALESCE(department_id, 0), name COLLATE NOCASE)",
+		"CREATE INDEX IF NOT EXISTS ix_work_categories_department ON work_categories(department_id)",
+	} {
+		if _, err := d.Exec(stmt); err != nil {
+			return notes, err
+		}
+	}
+
 	recCols, err := d.columns("work_records")
 	if err != nil {
 		return notes, err

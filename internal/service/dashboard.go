@@ -73,7 +73,7 @@ func (s *Dashboard) Build(user Row) (*DashboardData, error) {
 	}
 	cond, args := sc.SQL("r")
 	args = append(args, monthStart.Format(timeutil.Date)+" 00:00:00", nextMonth+" 00:00:00")
-	if d.Categories, err = db.All(s.DB, `SELECT wc.name, COUNT(*) AS record_count, COALESCE(SUM(r.work_count), 0) AS total_count
+	if d.Categories, err = db.All(s.DB, `SELECT `+categoryLabelSQL+` AS name, COUNT(*) AS record_count, COALESCE(SUM(r.work_count), 0) AS total_count
 		FROM work_records r JOIN work_categories wc ON wc.id = r.work_category_id
 		WHERE `+cond+` AND r.work_at >= ? AND r.work_at < ?
 		GROUP BY wc.id, wc.name ORDER BY total_count DESC, record_count DESC`, args...); err != nil {

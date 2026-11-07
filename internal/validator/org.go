@@ -137,24 +137,45 @@ func ResetPassword(in Input) (any, error) {
 
 // WorkCategoryInput 工作分类。
 type WorkCategoryInput struct {
-	ID         int64
-	Name       string
-	SortOrder  int64
-	IsCustomer bool
-	IsActive   bool
+	ID           int64
+	DepartmentID int64
+	Name         string
+	SortOrder    int64
+	IsCustomer   bool
+	IsActive     bool
 }
 
 func WorkCategory(in Input) (any, error) {
 	v := New(in)
 	out := WorkCategoryInput{
-		ID:         v.ID("id"),
-		Name:       v.Raw("name"),
-		SortOrder:  v.IntRange("sort_order", "排序值", 0, -999, 999),
-		IsCustomer: v.Bool("is_customer_project"),
-		IsActive:   v.Bool("is_active"),
+		ID:           v.ID("id"),
+		DepartmentID: v.RequiredID("department_id", "所属部门"),
+		Name:         v.Raw("name"),
+		SortOrder:    v.IntRange("sort_order", "排序值", 0, -999, 999),
+		IsCustomer:   v.Bool("is_customer_project"),
+		IsActive:     v.Bool("is_active"),
 	}
 	lenBetween(v, "name", "分类名称", out.Name, 2, 60)
 	return out, v.Err()
+}
+
+// CategoryFilterInput 分类管理页的部门筛选：Dept>0 为某部门（含下级），Unassigned 为“未指定部门”。
+type CategoryFilterInput struct {
+	Dept       int64
+	Unassigned bool
+	Key        string // 回显用："" / "none" / 部门 ID
+}
+
+func CategoryFilter(in Input) CategoryFilterInput {
+	v := New(in)
+	if v.Raw("dept") == "none" {
+		return CategoryFilterInput{Unassigned: true, Key: "none"}
+	}
+	out := CategoryFilterInput{Dept: v.ID("dept")}
+	if out.Dept > 0 {
+		out.Key = strconv.FormatInt(out.Dept, 10)
+	}
+	return out
 }
 
 // ProjectCategoryInput 子分类。

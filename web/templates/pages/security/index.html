@@ -96,7 +96,7 @@
 {{define "scripts"}}<script>
 document.querySelectorAll('[data-copy-text]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-        navigator.clipboard.writeText(btn.dataset.copyText).then(function () { WL.toast('success', '已复制到剪贴板'); });
+        WL.copy(btn.dataset.copyText);
     });
 });
 </script>{{end}}

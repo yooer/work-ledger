@@ -276,7 +276,7 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 		return nil, err
 	}
 	rows, err := db.All(c.DB, `SELECT r.id, r.content, r.work_at, r.difficulty, r.work_count, r.created_at, r.updated_at,
-		wc.name AS category_name, wc.is_customer_project, pc.name AS project_name,
+		`+categoryLabelSQL+` AS category_name, wc.is_customer_project, pc.name AS project_name,
 		u.id AS creator_id, u.name AS creator_name, u.username AS creator_username, u.employee_no AS creator_employee_no,
 		eu.name AS editor_name, d.name AS department_name, dpp.path AS department_path
 		FROM work_records r

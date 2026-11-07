@@ -33,7 +33,7 @@
 document.querySelectorAll('[data-print]').forEach(function (b) { b.addEventListener('click', function () { window.print(); }); });
 document.querySelectorAll('[data-copy-md]').forEach(function (b) {
     b.addEventListener('click', function () {
-        navigator.clipboard.writeText(document.getElementById('report-md').value).then(function () { WL.toast('success', '已复制 Markdown'); });
+        WL.copy(document.getElementById('report-md').value, '已复制 Markdown');
     });
 });
 </script>{{end}}

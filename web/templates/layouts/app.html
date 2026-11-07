@@ -90,7 +90,7 @@
         <footer class="footer footer-transparent d-print-none">
             <div class="container-xl d-flex flex-wrap justify-content-between small text-secondary">
                 <span>{{.App.Name}} · 让每一份工作都有记录</span>
-                <span>{{if .User.position_name}}{{.User.position_name}}{{else}}{{role .User.role}}{{end}} · {{.DepartmentLabel}} · v{{.App.Version}}</span>
+                <span>{{if .User.position_name}}{{.User.position_name}}{{else}}{{role .User.role}}{{end}} · {{.DepartmentLabel}} · {{ver .App.Version}}</span>
             </div>
         </footer>
     </div>

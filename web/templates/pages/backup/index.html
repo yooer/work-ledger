@@ -4,7 +4,7 @@
     <div class="card mb-3">
         <div class="card-header"><h3 class="card-title">{{icon "download"}} 下载完整备份</h3></div>
         <div class="card-body">
-            <p class="text-secondary">备份包含全部 11 张业务表：用户（含密码哈希与 2FA）、职务、部门、分类、台账、参与人员、周报、年度总结、时段总结和系统设置。<strong>不包含</strong>配置文件 .env、AI Key、日志和备份文件本身。PHP 版的备份可以在这里恢复（按原角色自动对应职务）；Go 版备份包含职务、多级部门等新信息，不再保证能恢复到 PHP 版。</p>
+            <p class="text-secondary">备份包含全部 11 张业务表：用户（含密码哈希与 2FA）、职务、部门、分类、台账、参与人员、周报、年度总结、时段总结和系统设置。<strong>不包含</strong>配置文件 .env、AI Key、FTP 密码、日志和备份文件本身。PHP 版的备份可以在这里恢复（按原角色自动对应职务）；Go 版备份包含职务、多级部门等新信息，不再保证能恢复到 PHP 版。</p>
             <div class="btn-list">
                 <a class="btn btn-primary" href="/backup/download?format=gz">{{icon "download"}}下载压缩备份（.json.gz）</a>
                 <a class="btn btn-outline-primary" href="/backup/download?format=json">下载未压缩 JSON</a>
@@ -13,6 +13,36 @@
             <div class="alert alert-warning mt-3 mb-0 small">备份包含密码哈希、TOTP 密钥和工作内容，敏感程度等同数据库文件，请勿通过公开渠道传输。</div>
         </div>
     </div>
+    {{$a := .Auto}}<form class="card mb-3" data-ajax data-url="/backup/ajax" data-action="save_auto" novalidate autocomplete="off">
+        <div class="card-header"><h3 class="card-title">{{icon "clock"}} 每日自动备份与 FTP 上传</h3>
+            {{if $a.Enabled}}<span class="badge bg-success-lt ms-auto">已开启 · 下次 {{$a.NextRun}}</span>{{else}}<span class="badge bg-secondary-lt ms-auto">未开启</span>{{end}}</div>
+        <div class="card-body">
+            <p class="text-secondary small">每天定时生成一份压缩备份（与“下载压缩备份”同格式，可直接用下方“从备份恢复”还原），文件名 <code>auto-日期-时间.json.gz</code>，保存在本地快照目录；填写 FTP 后自动上传。超出保留份数时只删除最旧的 <code>auto-*</code> 文件，其他文件不动；保留份数填 0 表示不删除。</p>
+            <div class="row g-2">
+                <div class="col-md-4 d-flex align-items-end pb-2"><label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" name="auto_backup_enabled" value="1"{{if $a.Enabled}} checked{{end}}><span class="form-check-label">开启每日自动备份</span></label></div>
+                <div class="col-4 col-md-3"><label class="form-label">备份时间</label><input class="form-control" type="text" name="auto_backup_time" value="{{$a.Time}}" placeholder="02:00" maxlength="5"></div>
+                <div class="col-4 col-md-2"><label class="form-label">本地保留</label><input class="form-control" type="number" name="keep_local" value="{{$a.KeepLocal}}" min="0" max="3650"></div>
+                <div class="col-4 col-md-3"><label class="form-label">FTP 保留</label><input class="form-control" type="number" name="keep_remote" value="{{$a.KeepFTP}}" min="0" max="3650"></div>
+            </div>
+            <h4 class="mt-3 mb-2">FTP 服务器 <span class="text-secondary small fw-normal">（不填地址则只做本地备份）</span></h4>
+            <div class="row g-2">
+                <div class="col-8 col-md-6"><label class="form-label">服务器地址</label><input class="form-control" type="text" name="ftp_host" value="{{$a.FTP.Host}}" placeholder="例如 192.168.1.20 或 ftp.example.com" maxlength="255"></div>
+                <div class="col-4 col-md-2"><label class="form-label">端口</label><input class="form-control" type="number" name="ftp_port" value="{{$a.FTP.Port}}" min="1" max="65535"></div>
+                <div class="col-md-4"><label class="form-label">远程目录</label><input class="form-control" type="text" name="ftp_dir" value="{{$a.FTP.Dir}}" placeholder="/work-ledger" maxlength="255"></div>
+                <div class="col-md-6"><label class="form-label">用户名</label><input class="form-control" type="text" name="ftp_user" value="{{$a.FTP.User}}" maxlength="128" autocomplete="off"></div>
+                <div class="col-md-6"><label class="form-label">密码</label><input class="form-control" type="password" name="ftp_password" value="" maxlength="256" autocomplete="new-password" placeholder="{{if $a.HasPassword}}已设置，留空表示不修改{{else}}未设置{{end}}"></div>
+                <div class="col-12"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="ftp_tls" value="1"{{if $a.FTP.TLS}} checked{{end}}><span class="form-check-label">使用显式 TLS 加密（FTPS，需服务器支持且证书有效）</span></label></div>
+            </div>
+            <div class="form-hint mt-2">FTP 密码只保存在本系统设置中，不会写进备份文件；清空服务器地址并保存即停用上传，同时清除密码。远程目录不存在时会自动创建。</div>
+            {{with .AutoLast}}<div class="alert {{if and .OK (or .Uploaded (not .FTPUsed))}}alert-success{{else}}alert-warning{{end}} mt-3 mb-0 small">
+                最近一次（{{if eq .Trigger "manual"}}手动{{else}}定时{{end}}）：{{.Time}}{{if .File}} · {{.File}}（{{.Size}}）{{end}}<br>{{.Message}}</div>{{end}}
+        </div>
+        <div class="card-footer d-flex flex-wrap flex-row-reverse gap-2">
+            <button type="submit" class="btn btn-primary">{{icon "check"}}保存设置</button>
+            <button type="button" class="btn btn-outline-primary" data-ajax-click data-url="/backup/ajax" data-action="run_auto" data-confirm="按已保存的设置立即备份{{if $a.FTP.Host}}并上传 FTP{{end}}？（表单中未保存的修改不会生效）">{{icon "upload"}}立即备份{{if $a.FTP.Host}}并上传{{end}}</button>
+            <button type="submit" class="btn btn-outline-secondary" data-action="test_ftp">{{icon "refresh"}}测试 FTP 连接</button>
+        </div>
+    </form>
     <form class="card mb-3 border-danger" data-ajax data-multipart data-url="/backup/ajax" data-action="restore" data-confirm="确定用备份覆盖当前全部数据吗？此操作会替换所有用户、台账和报告。" novalidate>
         <div class="card-header"><h3 class="card-title text-danger">{{icon "upload"}} 从备份恢复（覆盖）</h3></div>
         <div class="card-body">

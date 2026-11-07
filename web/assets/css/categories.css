@@ -2,3 +2,4 @@
 .wl-input-mini { width: 6rem; }
 .wl-edit-table td { vertical-align: middle; }
 .wl-edit-table input[type="text"] { min-width: 10rem; }
+.wl-dept-select { min-width: 12rem; max-width: 18rem; }

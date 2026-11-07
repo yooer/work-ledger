@@ -133,6 +133,7 @@ func (v *Views) funcs() template.FuncMap {
 		"dateRange":  timeutil.FormatRange,
 		"localInput": timeutil.ToLocalInput,
 		"role":       RoleLabel,
+		"ver":        VersionLabel,
 		"difficulty": DifficultyLabel,
 		"md":         func(s string) template.HTML { return template.HTML(Markdown(s)) },
 		"dept":       DepartmentLabel,
@@ -209,6 +210,15 @@ func (v *Views) funcs() template.FuncMap {
 			return s
 		},
 	}
+}
+
+// VersionLabel 显示用版本号：保证只有一个 “v” 前缀（构建注入的版本本身形如 v1.3.1）。
+func VersionLabel(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" || strings.HasPrefix(v, "dev") {
+		return "dev"
+	}
+	return "v" + strings.TrimLeft(v, "vV")
 }
 
 func RoleLabel(role any) string {

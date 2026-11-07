@@ -26,7 +26,7 @@ type RecordFilter struct {
 	Q            string
 }
 
-const recordColumns = `SELECT r.*, wc.name AS category_name, wc.is_customer_project,
+const recordColumns = `SELECT r.*, ` + categoryLabelSQL + ` AS category_name, wc.is_customer_project,
 	pc.name AS project_name, u.name AS creator_name, u.username AS creator_username,
 	u.employee_no AS creator_employee_no, eu.name AS editor_name,
 	d.name AS department_name, dpp.path AS department_path`
@@ -208,8 +208,9 @@ type RecordInput struct {
 	ParticipantIDs    []int64
 }
 
-// check 业务校验：分类/子分类是否可用、参与人员是否存在且启用。existing 为编辑前的记录。
-func (s *Records) check(in *RecordInput, existing Row) error {
+// check 业务校验：分类/子分类是否可用、参与人员是否存在且启用。existing 为编辑前的记录；
+// deptID 为台账所属部门（新建取本人部门，编辑取台账的部门快照），分类必须在该部门可用范围内（原值可保留）。
+func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
 	fields := map[string]string{}
 	cat, err := db.One(s.DB, "SELECT * FROM work_categories WHERE id = ?", in.WorkCategoryID)
 	if err != nil {
@@ -218,8 +219,17 @@ func (s *Records) check(in *RecordInput, existing Row) error {
 	curCat, curProj := existing.Int("work_category_id"), existing.Int("project_category_id")
 	if cat == nil {
 		fields["work_category_id"] = "请选择工作分类。"
-	} else if !cat.Bool("is_active") && (existing == nil || in.WorkCategoryID != curCat) {
-		fields["work_category_id"] = "所选工作分类已停用，请重新选择。"
+	} else if existing == nil || in.WorkCategoryID != curCat {
+		ids, all, err := categoryDeptScope(s.DB, deptID)
+		if err != nil {
+			return err
+		}
+		switch {
+		case !cat.Bool("is_active"):
+			fields["work_category_id"] = "所选工作分类已停用，请重新选择。"
+		case !categoryUsable(cat, ids, all):
+			fields["work_category_id"] = "所选工作分类不属于本部门，请重新选择。"
+		}
 	}
 	// 子分类规则：任何一级分类都可以有子分类；该分类下有启用的子分类时必须选择一个。
 	if cat != nil {
@@ -290,7 +300,7 @@ func (s *Records) check(in *RecordInput, existing Row) error {
 
 // Create 新建台账；记录创建者、部门快照、创建/编辑审计字段自动写入。
 func (s *Records) Create(user Row, in RecordInput) (int64, error) {
-	if err := s.check(&in, nil); err != nil {
+	if err := s.check(&in, nil, user.Int("department_id")); err != nil {
 		return 0, err
 	}
 	var id int64
@@ -318,7 +328,7 @@ func (s *Records) Update(sc Scope, user Row, id int64, in RecordInput) error {
 	if !s.CanEditRecord(sc, existing, user) {
 		return apperr.Forbidden("你没有修改这条工作记录的权限。")
 	}
-	if err := s.check(&in, existing); err != nil {
+	if err := s.check(&in, existing, existing.Int("department_id")); err != nil {
 		return err
 	}
 	return s.DB.Tx(func(tx db.Q) error {
@@ -376,25 +386,11 @@ func replaceParticipants(tx db.Q, recordID int64, ids []int64) error {
 	return nil
 }
 
-// FormOptions 台账表单所需的分类、项目、人员选项（停用项仅在编辑且为当前值时保留）。
-func (s *Records) FormOptions(curCategory, curProject int64, selected []int64) (cats, projects, people []Row, err error) {
-	all, err := db.All(s.DB, "SELECT * FROM work_categories ORDER BY sort_order, id")
-	if err != nil {
+// FormOptions 台账表单所需的分类、子分类、人员选项。deptID 为台账所属部门（新建取本人部门，编辑取台账的部门快照）；
+// 停用或不在部门范围内的分类仅在编辑且为当前值时保留。
+func (s *Records) FormOptions(deptID, curCategory, curProject int64, selected []int64) (cats, projects, people []Row, err error) {
+	if cats, projects, err = (&Categories{Core: s.Core}).UsableFor(deptID, curCategory, curProject); err != nil {
 		return
-	}
-	for _, c := range all {
-		if c.Bool("is_active") || c.Int("id") == curCategory {
-			cats = append(cats, c)
-		}
-	}
-	allP, err := db.All(s.DB, "SELECT * FROM project_categories ORDER BY sort_order, name")
-	if err != nil {
-		return
-	}
-	for _, p := range allP {
-		if p.Bool("is_active") || p.Int("id") == curProject {
-			projects = append(projects, p)
-		}
 	}
 	people, err = (&Users{Core: s.Core}).ParticipantOptions(selected)
 	return

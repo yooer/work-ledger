@@ -44,7 +44,7 @@ var backupTables = []struct {
 	{"users", []string{"id", "username", "password_hash", "name", "employee_no", "role", "department_id", "phone", "email", "is_active",
 		"totp_secret", "totp_enabled", "totp_recovery_codes", "totp_last_used_step", "last_login_at", "created_at", "updated_at"},
 		[]string{"supervisor_id", "position_id"}},
-	{"work_categories", []string{"id", "name", "is_customer_project", "is_active", "sort_order", "created_at", "updated_at"}, nil},
+	{"work_categories", []string{"id", "name", "is_customer_project", "is_active", "sort_order", "created_at", "updated_at"}, []string{"department_id"}},
 	{"project_categories", []string{"id", "work_category_id", "name", "is_active", "sort_order", "created_at", "updated_at"}, nil},
 	{"work_records", []string{"id", "work_category_id", "project_category_id", "content", "work_at", "difficulty", "work_count",
 		"department_id", "created_by", "created_at", "updated_by", "updated_at", "import_hash"}, nil},
@@ -54,6 +54,9 @@ var backupTables = []struct {
 	{"period_reports", []string{"id", "start_date", "end_date", "period_label", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}, []string{"team_leader_id"}},
 	{"app_settings", []string{"name", "value", "updated_at"}, nil},
 }
+
+// secretSettings 不写入备份文件的设置项；恢复备份时保留当前值。
+var secretSettings = []string{SettingFTPPassword}
 
 // optionalTables Go 版新增的整张表：PHP 版备份中没有，恢复时允许缺失。
 var optionalTables = map[string]bool{"positions": true}
@@ -102,7 +105,11 @@ func (s *Backup) ExportJSON() ([]byte, error) {
 		tables.WriteString("{")
 		for ti, t := range backupTables {
 			cols := tableCols(t.name)
-			rows, err := db.All(tx, "SELECT "+strings.Join(cols, ", ")+" FROM "+t.name+orderBy(t.name))
+			where := ""
+			if t.name == "app_settings" {
+				where = " WHERE name NOT IN ('" + strings.Join(secretSettings, "', '") + "')" // FTP 密码等不进备份
+			}
+			rows, err := db.All(tx, "SELECT "+strings.Join(cols, ", ")+" FROM "+t.name+where+orderBy(t.name))
 			if err != nil {
 				return err
 			}
@@ -240,8 +247,11 @@ func (s *Backup) LocalFiles(limit int) ([]LocalFile, error) {
 			continue
 		}
 		kind := "JSON 快照"
-		if strings.HasSuffix(e.Name(), ".sqlite") {
+		switch {
+		case strings.HasSuffix(e.Name(), ".sqlite"):
 			kind = "数据库文件（升级前）"
+		case autoBackupName.MatchString(e.Name()):
+			kind = "每日自动备份"
 		}
 		out = append(out, LocalFile{Name: e.Name(), Size: info.Size(), SizeText: HumanSize(info.Size()),
 			Time: info.ModTime().In(timeutil.Location()).Format("2006-01-02 15:04:05"), PreRestore: strings.HasPrefix(e.Name(), "pre-restore-"), Kind: kind})
@@ -441,6 +451,10 @@ func sqlValue(v any) any {
 func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 	restored := map[string]int{}
 	err := s.DB.Tx(func(tx db.Q) error {
+		kept, err := db.All(tx, "SELECT name, value FROM app_settings WHERE name IN ("+db.Placeholders(len(secretSettings))+")", anySlice(secretSettings)...)
+		if err != nil {
+			return err
+		}
 		for _, t := range deleteOrder {
 			if _, err := db.Exec(tx, "DELETE FROM "+t); err != nil {
 				return err
@@ -458,6 +472,11 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 		}
 		for _, t := range insertOrder {
 			if err := insertRows(tx, t, data.Tables[t]); err != nil {
+				return err
+			}
+		}
+		for _, k := range kept { // 备份中不含 FTP 密码等：沿用恢复前的值
+			if _, err := db.Exec(tx, "INSERT OR REPLACE INTO app_settings (name, value, updated_at) VALUES (?, ?, ?)", k.Str("name"), k.Str("value"), now()); err != nil {
 				return err
 			}
 		}
@@ -481,6 +500,14 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 		restored[t.name] = len(data.Tables[t.name])
 	}
 	return restored, nil
+}
+
+func anySlice(list []string) []any {
+	out := make([]any, len(list))
+	for i, v := range list {
+		out[i] = v
+	}
+	return out
 }
 
 // insertDepartmentsByLevel 按层级写入部门（上级先于下级），支持任意层级。

@@ -317,3 +317,56 @@ func TestNewRecordDefaultDifficulty(t *testing.T) {
 		t.Fatal("difficulty 3 should not be preselected")
 	}
 }
+
+func TestVersionLabelSingleV(t *testing.T) {
+	old := Version
+	Version = "v1.4.0"
+	t.Cleanup(func() { Version = old })
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	for _, p := range []string{"/", "/settings"} {
+		_, page := c.get(p)
+		if !strings.Contains(page, "v1.4.0") || strings.Contains(page, "vv1.4.0") {
+			t.Fatalf("%s version label wrong", p)
+		}
+	}
+	_, page := newClient(t, srv.URL).get("/login")
+	if !strings.Contains(page, "· v1.4.0") || strings.Contains(page, "vv1.4.0") {
+		t.Fatal("login page version label wrong")
+	}
+}
+
+func TestCategoryDepartmentAjaxAndBackupPage(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	_, page := c.get("/categories")
+	if !strings.Contains(page, `name="department_id"`) || !strings.Contains(page, "还没有指定所属部门") {
+		t.Fatal("categories page should ask for departments")
+	}
+	if code, body := c.post("/categories/ajax", "application/json", `{"action":"save_work","name":"无部门分类","is_active":true}`, true); code != 422 || !strings.Contains(body, "department_id") {
+		t.Fatalf("category without department: %d %s", code, body)
+	}
+	if code, body := c.post("/categories/ajax", "application/json", `{"action":"save_work","name":"部门分类","department_id":1,"is_active":true}`, true); code != 200 {
+		t.Fatalf("category with department: %d %s", code, body)
+	}
+	if code, _ := c.get("/categories?dept=none"); code != 200 {
+		t.Fatal("filter unassigned")
+	}
+	_, page = c.get("/backup")
+	if !strings.Contains(page, `data-action="save_auto"`) || !strings.Contains(page, `name="ftp_host"`) {
+		t.Fatal("backup page should have auto backup settings")
+	}
+	if code, body := c.post("/backup/ajax", "application/json", `{"action":"save_auto","auto_backup_enabled":true,"auto_backup_time":"25:00","ftp_host":"ftp://x/y"}`, true); code != 422 || !strings.Contains(body, "auto_backup_time") || !strings.Contains(body, "ftp_host") {
+		t.Fatalf("invalid auto backup: %d %s", code, body)
+	}
+	if code, body := c.post("/backup/ajax", "application/json", `{"action":"save_auto","auto_backup_enabled":true,"auto_backup_time":"03:30","keep_local":5,"keep_remote":9,"ftp_host":"","ftp_port":21}`, true); code != 200 {
+		t.Fatalf("save auto backup: %d %s", code, body)
+	}
+	if code, body := c.post("/backup/ajax", "application/json", `{"action":"run_auto"}`, true); code != 200 || !strings.Contains(body, "本地备份已生成") {
+		t.Fatalf("run auto backup: %d %s", code, body)
+	}
+	_, page = c.get("/backup")
+	if !strings.Contains(page, "下次") || !strings.Contains(page, "每日自动备份") {
+		t.Fatal("backup page should show schedule and auto file")
+	}
+}

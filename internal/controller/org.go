@@ -230,23 +230,32 @@ func (c *Controllers) savePosition(ctx *web.Ctx, in any) (any, error) {
 // ---------------- 分类 ----------------
 
 func (c *Controllers) categoriesPage(ctx *web.Ctx) error {
-	cats, projects, err := c.S.Categories.Overview()
+	f := validator.CategoryFilter(ctx.Query())
+	cats, projects, err := c.S.Categories.Overview(f.Dept, f.Unassigned)
 	if err != nil {
 		return err
 	}
-	names := map[int64]string{}
-	for _, cat := range cats {
-		names[cat.Int("id")] = cat.Str("name")
+	depts, err := c.S.Depts.Tree()
+	if err != nil {
+		return err
 	}
-	for _, p := range projects {
-		p["category_name"] = names[p.Int("work_category_id")]
+	unassigned, err := c.S.Categories.UnassignedCount()
+	if err != nil {
+		return err
 	}
-	return ctx.Render("categories/index", map[string]any{"PageTitle": "分类管理", "Active": "categories", "Categories": cats, "Projects": projects})
+	active := make([]service.Row, 0, len(depts))
+	for _, d := range depts {
+		if d.Bool("is_active") {
+			active = append(active, d)
+		}
+	}
+	return ctx.Render("categories/index", map[string]any{"PageTitle": "分类管理", "Active": "categories", "Categories": cats, "Projects": projects,
+		"Departments": depts, "ActiveDepartments": active, "Filter": f, "UnassignedCount": unassigned})
 }
 
 func (c *Controllers) saveWorkCategory(ctx *web.Ctx, in any) (any, error) {
 	p := in.(validator.WorkCategoryInput)
-	created, err := c.S.Categories.SaveWork(service.WorkCategoryInput{ID: p.ID, Name: p.Name, SortOrder: p.SortOrder, IsCustomer: p.IsCustomer, IsActive: p.IsActive})
+	created, err := c.S.Categories.SaveWork(service.WorkCategoryInput{ID: p.ID, DepartmentID: p.DepartmentID, Name: p.Name, SortOrder: p.SortOrder, IsCustomer: p.IsCustomer, IsActive: p.IsActive})
 	if err != nil {
 		return nil, err
 	}

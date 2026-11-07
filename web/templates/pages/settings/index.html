@@ -79,7 +79,7 @@ AI_TIMEOUT=120</pre>
         <div class="card-header"><h3 class="card-title">运行环境</h3></div>
         <div class="card-body">
             <dl class="row mb-0">
-                <dt class="col-4">程序版本</dt><dd class="col-8">v{{.App.Version}}</dd>
+                <dt class="col-4">程序版本</dt><dd class="col-8">{{ver .App.Version}}</dd>
                 <dt class="col-4">运行目录</dt><dd class="col-8"><code>{{.Home}}</code></dd>
                 <dt class="col-4">监听地址</dt><dd class="col-8"><code>{{.ListenAddr}}</code></dd>
                 <dt class="col-4">应用地址</dt><dd class="col-8"><code>{{.AppURL}}</code></dd>

@@ -12,7 +12,8 @@ import (
 	"work-ledger/internal/timeutil"
 )
 
-// Scheduler 内置定时生成全公司周报 / 年度总结（默认关闭，由管理员在“系统与 AI”中开启）。
+// Scheduler 内置定时生成全公司周报 / 年度总结（默认关闭，由管理员在“系统与 AI”中开启），
+// 以及每日自动备份（默认关闭，在“数据备份”页开启）。
 //
 // 规则：
 //   - 周报：上一个完整周期结束后第 N 天（默认次日）的指定时间之后，若该周期还没有“全公司”周报，则生成一次。
@@ -20,10 +21,11 @@ import (
 //   - 服务停机错过时间点的，启动后会自动补生成；失败会在 30 分钟后重试，同一周期最多尝试 5 次。
 type Scheduler struct {
 	*Core
-	Settings *Settings
-	Weekly   *WeeklyReports
-	Annual   *AnnualReports
-	attempts map[string]attempt
+	Settings   *Settings
+	Weekly     *WeeklyReports
+	Annual     *AnnualReports
+	AutoBackup *AutoBackup // 每日自动备份（可为空）
+	attempts   map[string]attempt
 }
 
 type attempt struct {
@@ -66,6 +68,9 @@ func (s *Scheduler) tick(ctx context.Context) {
 	}()
 	s.Settings.ClearCache()
 	n := timeutil.Now()
+	if s.AutoBackup != nil {
+		s.AutoBackup.Tick(n)
+	}
 	if s.Settings.Bool(SettingAutoWeekly) {
 		start, due := s.WeeklyDue(n)
 		if !n.Before(due) {

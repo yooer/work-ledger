@@ -87,3 +87,6 @@
     flex: 0 1 0;
     min-width: 0;
 }
+
+/* 复制兼容：临时文本框放在可视区外 */
+.wl-copy-buffer { position: fixed; top: -1000px; left: -1000px; width: 1px; height: 1px; opacity: 0; }

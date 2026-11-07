@@ -1,6 +1,6 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/records.css"}}">{{end}}
 {{define "content"}}{{$m := .Mode}}{{$f := .Filter}}
-{{if eq $m.Key "team"}}<div class="alert alert-info">团队范围：{{if .DeptLabel}}分管部门 <strong>{{.DeptLabel}}</strong>（含二级子部门，按台账创建时的部门归属统计）{{end}}{{if and .DeptLabel .SubordinateCount}}，以及{{end}}{{if .SubordinateCount}}直接和间接下属 <strong>{{.SubordinateCount}}</strong> 人{{end}}{{if not (or .DeptLabel .SubordinateCount)}}全部人员{{end}}。可以查看、导出{{if .LeaderCanEdit}}，并可修改团队成员的台账{{else}}；只能编辑自己创建的记录{{end}}。</div>{{end}}
+{{if eq $m.Key "team"}}<div class="alert alert-info">团队范围：{{if .DeptLabel}}分管部门 <strong>{{.DeptLabel}}</strong>（含全部下级部门，按台账创建时的部门归属统计）{{end}}{{if and .DeptLabel .SubordinateCount}}，以及{{end}}{{if .SubordinateCount}}直接和间接下属 <strong>{{.SubordinateCount}}</strong> 人{{end}}{{if not (or .DeptLabel .SubordinateCount)}}全部人员{{end}}。可以查看、导出{{if .LeaderCanEdit}}，并可修改团队成员的台账{{else}}；只能编辑自己创建的记录{{end}}。</div>{{end}}
 {{if eq $m.Key "mine"}}<div class="alert alert-info">这里展示你创建的工作记录，以及别人创建、把你列为参与人员的记录（标记“参与”，由创建者负责修改）。</div>{{end}}
 <div class="card mb-3 wl-filter-card">
     <div class="card-body">
@@ -9,7 +9,7 @@
             <div class="col-6 col-md-2"><label class="form-label">结束日期</label><input class="form-control" type="text" name="to" value="{{$f.To}}" placeholder="YYYY-MM-DD" data-datepicker></div>
             <div class="col-6 col-md-2"><label class="form-label">工作分类</label>
                 <select class="form-select" name="category_id"><option value="0">全部分类</option>
-                {{range .Categories}}<option value="{{.id}}"{{if same .id $f.CategoryID}} selected{{end}}>{{.name}}</option>{{end}}</select></div>
+                {{range .Categories}}<option value="{{.id}}"{{if same .id $f.CategoryID}} selected{{end}}>{{.label}}</option>{{end}}</select></div>
             <div class="col-6 col-md-2"><label class="form-label">子分类</label>
                 <select class="form-select" name="project_id"><option value="0">全部子分类</option>
                 {{range .Projects}}<option value="{{.id}}"{{if same .id $f.ProjectID}} selected{{end}}>{{.name}}</option>{{end}}</select></div>

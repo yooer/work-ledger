@@ -22,7 +22,7 @@
         </div>
         {{template "flash" .}}
         {{template "content" .}}
-        <div class="text-center text-secondary mt-3 small">WORK LEDGER · v{{.App.Version}}</div>
+        <div class="text-center text-secondary mt-3 small">WORK LEDGER · {{ver .App.Version}}</div>
     </div>
 </div>
 <div class="toast-container position-fixed top-0 end-0 p-3" id="wl-toasts"></div>

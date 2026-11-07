@@ -18,9 +18,12 @@ func (c *Controllers) registerBackup(app *web.App) {
 	app.Page("/backup/download", web.Admin, c.backupDownload)
 	app.Page("/backup/local", web.Admin, c.backupDownloadLocal)
 	app.Ajax("/backup/ajax", web.Admin, web.Actions{
-		"snapshot": {Validate: validator.None, Handle: c.backupSnapshot},
-		"restore":  {Validate: validator.Restore, Handle: c.backupRestore, Multipart: true},
-		"clear":    {Validate: validator.ClearData, Handle: c.clearData},
+		"snapshot":  {Validate: validator.None, Handle: c.backupSnapshot},
+		"restore":   {Validate: validator.Restore, Handle: c.backupRestore, Multipart: true},
+		"clear":     {Validate: validator.ClearData, Handle: c.clearData},
+		"save_auto": {Validate: validator.AutoBackup, Handle: c.saveAutoBackup},
+		"test_ftp":  {Validate: validator.AutoBackup, Handle: c.testFTP},
+		"run_auto":  {Validate: validator.None, Handle: c.runAutoBackup},
 	})
 }
 
@@ -37,6 +40,7 @@ func (c *Controllers) backupPage(ctx *web.Ctx) error {
 		"PageTitle": "数据备份与恢复", "Active": "backup", "DBSize": c.S.Backup.DBSize(), "Counts": counts,
 		"Tables": service.TableNames(), "Files": files, "MaxUploadMB": c.S.Core.Cfg.Limits.BackupMaxUploadMB,
 		"MaxJSONMB": c.S.Core.Cfg.Limits.BackupMaxJSONMB, "BackupDir": c.S.Core.Cfg.Paths.Backups,
+		"Auto": c.S.AutoBackup.Config(), "AutoLast": c.S.AutoBackup.LastStatus(),
 	})
 }
 
@@ -147,4 +151,36 @@ func (c *Controllers) backupRestore(ctx *web.Ctx, _ any) (any, error) {
 	ctx.Flash("success", "数据恢复完成：工作记录 "+strconv.Itoa(restored["work_records"])+" 条，用户 "+strconv.Itoa(restored["users"])+
 		" 个。已退出登录，请使用备份中的管理员账号重新登录。恢复前快照："+safety)
 	return web.Result{Redirect: "/login"}, nil
+}
+
+func autoBackupConfig(p validator.AutoBackupInput) service.AutoBackupConfig {
+	return service.AutoBackupConfig{Enabled: p.Enabled, Time: p.Time, KeepLocal: p.KeepLocal, KeepFTP: p.KeepFTP,
+		FTP: service.FTPConfig{Host: p.FTPHost, Port: p.FTPPort, User: p.FTPUser, Password: p.FTPPassword, Dir: p.FTPDir, TLS: p.FTPTLS}}
+}
+
+func (c *Controllers) saveAutoBackup(ctx *web.Ctx, in any) (any, error) {
+	if err := c.S.AutoBackup.SaveConfig(autoBackupConfig(in.(validator.AutoBackupInput))); err != nil {
+		return nil, err
+	}
+	return web.Result{Message: "自动备份设置已保存。", Redirect: "/backup", FlashOnRedirect: true}, nil
+}
+
+// testFTP 用表单当前填写的参数测试（密码留空时用已保存的密码），不保存。
+func (c *Controllers) testFTP(ctx *web.Ctx, in any) (any, error) {
+	cfg := autoBackupConfig(in.(validator.AutoBackupInput))
+	msg, err := c.S.AutoBackup.TestFTP(c.S.AutoBackup.WithStoredPassword(cfg.FTP))
+	if err != nil {
+		return nil, err
+	}
+	return web.Result{Message: msg}, nil
+}
+
+// runAutoBackup 立即按已保存的设置备份并上传。
+func (c *Controllers) runAutoBackup(ctx *web.Ctx, _ any) (any, error) {
+	st := c.S.AutoBackup.Run("manual")
+	if !st.OK || (st.FTPUsed && !st.Uploaded) {
+		return nil, apperr.New(st.Message) // 上传失败也按失败提示（本地备份已生成）
+	}
+	c.S.Core.Log.Info("手动执行自动备份", "user", ctx.User.Str("username"), "file", st.File, "uploaded", st.Uploaded)
+	return web.Result{Message: st.Message, Redirect: "/backup", FlashOnRedirect: true}, nil
 }
