@@ -15,7 +15,7 @@ import (
 type Categories struct{ *Core }
 
 // categoryLabelSQL 分类显示名：不同部门有同名分类时追加部门名，如“日常维护（运维一班）”。需要别名 wc。
-const categoryLabelSQL = `CASE WHEN wc.department_id IS NOT NULL AND EXISTS (SELECT 1 FROM work_categories wcx WHERE wcx.name = wc.name AND wcx.id <> wc.id)
+const categoryLabelSQL = `CASE WHEN wc.department_id IS NOT NULL AND EXISTS (SELECT 1 FROM work_categories wcx WHERE LOWER(wcx.name) = LOWER(wc.name) AND wcx.id <> wc.id)
 	THEN wc.name || '（' || COALESCE((SELECT cdx.name FROM departments cdx WHERE cdx.id = wc.department_id), '') || '）' ELSE wc.name END`
 
 const categorySelect = `SELECT wc.*, ` + categoryLabelSQL + ` AS label, dpp.path AS department_path
@@ -249,7 +249,7 @@ func (s *Categories) SaveWork(in WorkCategoryInput) (bool, error) {
 	case !dept.Bool("is_active") && (existing == nil || existing.Int("department_id") != in.DepartmentID):
 		fields["department_id"] = "所选部门已停用，请重新选择。"
 	}
-	if dup, err := db.Value(s.DB, "SELECT id FROM work_categories WHERE name = ? AND COALESCE(department_id, 0) = ? AND id <> ?", in.Name, in.DepartmentID, in.ID); err != nil {
+	if dup, err := db.Value(s.DB, "SELECT id FROM work_categories WHERE LOWER(name) = LOWER(?) AND COALESCE(department_id, 0) = ? AND id <> ?", in.Name, in.DepartmentID, in.ID); err != nil {
 		return false, err
 	} else if dup != nil {
 		fields["name"] = "该部门已有同名工作分类。"
@@ -298,7 +298,7 @@ func (s *Categories) SaveProject(in ProjectInput) (bool, error) {
 	fields := map[string]string{}
 	if cat == nil {
 		fields["work_category_id"] = "请选择所属的一级工作分类。"
-	} else if dup, err := db.Value(s.DB, "SELECT id FROM project_categories WHERE work_category_id = ? AND name = ? AND id <> ?", in.WorkCategoryID, in.Name, in.ID); err != nil {
+	} else if dup, err := db.Value(s.DB, "SELECT id FROM project_categories WHERE work_category_id = ? AND LOWER(name) = LOWER(?) AND id <> ?", in.WorkCategoryID, in.Name, in.ID); err != nil {
 		return false, err
 	} else if dup != nil {
 		fields["name"] = "该工作分类下已存在同名子分类。"

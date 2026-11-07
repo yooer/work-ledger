@@ -687,13 +687,13 @@ var categoryWithDept = regexp.MustCompile(`^(.+)（([^（）]+)）$`)
 // 找不到且允许自动补充时，在记录人所在部门下新建。
 func (s *Importer) resolveCategory(tx db.Q, name string, deptID int64, customer, autoCreate bool, res *ImportResult) (Row, error) {
 	const q = `SELECT wc.*, d.name AS department_name FROM work_categories wc LEFT JOIN departments d ON d.id = wc.department_id`
-	cands, err := db.All(tx, q+" WHERE wc.name = ? ORDER BY wc.id", name)
+	cands, err := db.All(tx, q+" WHERE LOWER(wc.name) = LOWER(?) ORDER BY wc.id", name)
 	if err != nil {
 		return nil, err
 	}
 	if len(cands) == 0 {
 		if m := categoryWithDept.FindStringSubmatch(name); m != nil {
-			if cands, err = db.All(tx, q+" WHERE wc.name = ? AND d.name = ? ORDER BY wc.id", strings.TrimSpace(m[1]), strings.TrimSpace(m[2])); err != nil {
+			if cands, err = db.All(tx, q+" WHERE LOWER(wc.name) = LOWER(?) AND LOWER(d.name) = LOWER(?) ORDER BY wc.id", strings.TrimSpace(m[1]), strings.TrimSpace(m[2])); err != nil {
 				return nil, err
 			}
 		}
@@ -745,7 +745,7 @@ func (s *Importer) resolveCategory(tx db.Q, name string, deptID int64, customer,
 }
 
 func (s *Importer) resolveProject(tx db.Q, categoryID int64, name string, autoCreate bool, res *ImportResult) (int64, error) {
-	p, err := db.One(tx, "SELECT id FROM project_categories WHERE work_category_id = ? AND name = ? LIMIT 1", categoryID, name)
+	p, err := db.One(tx, "SELECT id FROM project_categories WHERE work_category_id = ? AND LOWER(name) = LOWER(?) LIMIT 1", categoryID, name)
 	if err != nil {
 		return 0, err
 	}
@@ -771,7 +771,7 @@ func (s *Importer) resolveUser(tx db.Q, token string, autoCreate, strict bool, r
 	if token == "" {
 		return nil, nil
 	}
-	matches, err := db.All(tx, "SELECT * FROM users WHERE name = ? OR employee_no = ? OR username = ? LIMIT 10", token, token, token)
+	matches, err := db.All(tx, "SELECT * FROM users WHERE name = ? OR LOWER(employee_no) = LOWER(?) OR LOWER(username) = LOWER(?) LIMIT 10", token, token, token)
 	if err != nil {
 		return nil, err
 	}
@@ -804,7 +804,7 @@ func (s *Importer) resolveUser(tx db.Q, token string, autoCreate, strict bool, r
 		b := make([]byte, 5)
 		_, _ = rand.Read(b)
 		cand := "legacy_" + hex.EncodeToString(b)
-		if v, err := db.Value(tx, "SELECT id FROM users WHERE username = ?", cand); err != nil {
+		if v, err := db.Value(tx, "SELECT id FROM users WHERE LOWER(username) = LOWER(?)", cand); err != nil {
 			return nil, err
 		} else if v == nil {
 			username = cand

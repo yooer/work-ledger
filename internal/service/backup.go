@@ -55,6 +55,10 @@ var backupTables = []struct {
 	{"app_settings", []string{"name", "value", "updated_at"}, nil},
 }
 
+// idTables 带自增 id 的业务表（恢复后需同步 PostgreSQL 序列）。
+var idTables = []string{"departments", "positions", "users", "work_categories", "project_categories", "work_records",
+	"weekly_reports", "annual_reports", "period_reports"}
+
 // secretSettings 不写入备份文件的设置项；恢复备份时保留当前值。
 var secretSettings = []string{SettingFTPPassword}
 
@@ -299,9 +303,25 @@ func TableNames() []string {
 	return out
 }
 
+// DBInfo 页面显示用：数据库类型（含版本）与位置。
+func (s *Backup) DBInfo() (kind, where string) {
+	if s.DB.Dialect() == db.SQLite {
+		return "SQLite", s.Cfg.DB.SQLitePath
+	}
+	return s.DB.ServerLabel(), fmt.Sprintf("%s:%d / %s", s.Cfg.DB.Host, s.Cfg.DB.Port, s.Cfg.DB.Name)
+}
+
 // DBSize 数据库文件（含 WAL）大小。
 func (s *Backup) DBSize() string {
 	var size int64
+	switch s.DB.Dialect() {
+	case db.MySQL:
+		size, _ = db.Int(s.DB, "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = DATABASE()")
+		return HumanSize(size)
+	case db.Postgres:
+		size, _ = db.Int(s.DB, "SELECT pg_database_size(current_database())")
+		return HumanSize(size)
+	}
 	for _, f := range []string{s.DB.Path, s.DB.Path + "-wal"} {
 		if info, err := os.Stat(f); err == nil {
 			size += info.Size()
@@ -455,6 +475,10 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 		if err != nil {
 			return err
 		}
+		// 主管领导是自引用外键：先解除，避免 MySQL 删除时的级联限制
+		if _, err := db.Exec(tx, "UPDATE users SET supervisor_id = NULL"); err != nil {
+			return err
+		}
 		for _, t := range deleteOrder {
 			if _, err := db.Exec(tx, "DELETE FROM "+t); err != nil {
 				return err
@@ -476,9 +500,14 @@ func (s *Backup) Restore(data *backupData) (map[string]int, error) {
 			}
 		}
 		for _, k := range kept { // 备份中不含 FTP 密码等：沿用恢复前的值
-			if _, err := db.Exec(tx, "INSERT OR REPLACE INTO app_settings (name, value, updated_at) VALUES (?, ?, ?)", k.Str("name"), k.Str("value"), now()); err != nil {
+			if _, err := db.Exec(tx, `INSERT INTO app_settings (name, value, updated_at) VALUES (?, ?, ?)
+				ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, k.Str("name"), k.Str("value"), now()); err != nil {
 				return err
 			}
+		}
+		// 按备份写入了指定 id：PostgreSQL 需把自增序列推进到最大 id 之后
+		if err := db.ResetSequences(tx, idTables...); err != nil {
+			return err
 		}
 		// PHP 版备份没有职务：按原角色对应预置职务
 		if err := ensurePositions(tx); err != nil {
@@ -578,6 +607,9 @@ func insertRowsWith(tx db.Q, table string, rows []map[string]any, nullCols map[s
 
 // SQLiteSnapshot 用 VACUUM INTO 生成一致的数据库文件副本（升级前备份、wlctl backup 使用）。
 func (s *Backup) SQLiteSnapshot(prefix string) (string, error) {
+	if s.DB.Dialect() != db.SQLite {
+		return "", errors.New("仅 SQLite 支持数据库文件快照")
+	}
 	if err := os.MkdirAll(s.Cfg.Paths.Backups, 0o750); err != nil {
 		return "", err
 	}

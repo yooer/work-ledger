@@ -53,7 +53,7 @@ func ensurePositions(tx db.Q) error {
 	}
 	for role, name := range legacyRolePosition {
 		// 默认职务被改名或删除时，退而使用同权限级别的第一个职务；仍没有则新建。
-		id, err := db.Int(tx, "SELECT id FROM positions WHERE name = ? AND role = ? LIMIT 1", name, role)
+		id, err := db.Int(tx, "SELECT id FROM positions WHERE LOWER(name) = LOWER(?) AND role = ? LIMIT 1", name, role)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (s *Positions) Save(in PositionInput) (bool, error) {
 		}
 	}
 	fields := map[string]string{}
-	if dup, err := db.Value(s.DB, "SELECT id FROM positions WHERE name = ? AND id <> ?", in.Name, in.ID); err != nil {
+	if dup, err := db.Value(s.DB, "SELECT id FROM positions WHERE LOWER(name) = LOWER(?) AND id <> ?", in.Name, in.ID); err != nil {
 		return false, err
 	} else if dup != nil {
 		fields["name"] = "职务名称已存在。"

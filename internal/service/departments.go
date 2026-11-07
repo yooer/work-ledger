@@ -160,7 +160,7 @@ type DepartmentInput struct {
 
 func (s *Departments) check(id int64, in DepartmentInput, current Row) error {
 	fields := map[string]string{}
-	if exists, err := db.Value(s.DB, "SELECT id FROM departments WHERE name = ? AND id <> ?", in.Name, id); err != nil {
+	if exists, err := db.Value(s.DB, "SELECT id FROM departments WHERE LOWER(name) = LOWER(?) AND id <> ?", in.Name, id); err != nil {
 		return err
 	} else if exists != nil {
 		fields["name"] = "部门名称已存在（部门名称需全局唯一）。"

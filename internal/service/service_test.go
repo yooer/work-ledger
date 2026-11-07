@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"work-ledger/internal/apperr"
 	"work-ledger/internal/config"
 	"work-ledger/internal/db"
+	"work-ledger/internal/dbtest"
 	"work-ledger/internal/timeutil"
 )
 
@@ -39,11 +39,8 @@ func newTestServices(t *testing.T) (*Services, string) {
 	if err := cfg.EnsureDirs(); err != nil {
 		t.Fatal(err)
 	}
-	d, err := db.Open(filepath.Join(home, "data", "app.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
+	d, o := dbtest.Open(t, home)
+	dbtest.Apply(cfg, o)
 	s := New(d, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	res, err := Install(s.Core, InstallOptions{AdminPassword: "Admin12345", Demo: true})
 	if err != nil {

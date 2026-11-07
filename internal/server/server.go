@@ -51,7 +51,7 @@ func Bootstrap(cfg *config.Config, log *slog.Logger) (*db.DB, *service.Services,
 	if err := cfg.EnsureDirs(); err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Open(cfg.DB.SQLitePath)
+	d, err := db.OpenConfig(cfg.DB)
 	if err != nil {
 		return nil, nil, err
 	}

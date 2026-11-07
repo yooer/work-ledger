@@ -21,11 +21,12 @@ func (c *Controllers) settingsPage(ctx *web.Ctx) error {
 		return err
 	}
 	cfg := c.S.Core.Cfg
+	dbKind, dbWhere := c.S.Backup.DBInfo()
 	return ctx.Render("settings/index", map[string]any{
-		"PageTitle": "系统与 AI", "Active": "settings",
+		"PageTitle": "系统与 AI", "Active": "settings", "DBKind": dbKind,
 		"AIReady": c.S.AI.Configured(), "TokenReady": cfg.AI.APIToken != "", "KeyReady": cfg.AI.APIKey != "",
 		"AIBaseURL": cfg.AI.BaseURL, "AIModel": cfg.AI.Model, "AppURL": cfg.App.URL, "Timezone": cfg.App.Timezone,
-		"ListenAddr": cfg.App.ListenAddr, "Home": cfg.Paths.Home, "EnvFile": cfg.Paths.EnvFile, "DBPath": cfg.DB.SQLitePath,
+		"ListenAddr": cfg.App.ListenAddr, "Home": cfg.Paths.Home, "EnvFile": cfg.Paths.EnvFile, "DBPath": dbWhere,
 		"WeekStart": c.S.Settings.WeekStartDay(), "WeekEnd": c.S.Settings.WeekEndDay(), "CycleLabel": c.S.Settings.WeekCycleLabel(),
 		"Counts": counts, "LeaderCanEdit": c.S.Settings.LeaderCanEdit(), "LeaderCanDelete": c.S.Settings.LeaderCanDelete(), "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
 	})

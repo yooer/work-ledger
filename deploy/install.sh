@@ -17,6 +17,13 @@ LISTEN="${WL_LISTEN:-127.0.0.1:8080}"
 ADMIN_USER="admin"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 DEMO=0
+DB_DRIVER="${WL_DB_DRIVER:-sqlite}"
+DB_HOST=""
+DB_PORT=""
+DB_NAME=""
+DB_USER=""
+DB_PASSWORD="${WL_DB_PASSWORD:-}"
+DB_SSLMODE=""
 
 usage() {
   cat <<USAGE
@@ -29,6 +36,13 @@ usage() {
   --user 账号             运行账号（默认 work-ledger）
   --base-url URL          下载源（默认 https://github.com/yooer/work-ledger）
   --demo                  同时创建演示数据
+  --db-driver 类型        数据库：sqlite（默认）、mysql（MySQL 8.0+ / MariaDB 10.5+）、postgres（PostgreSQL 12+）
+  --db-host 地址          数据库地址（mysql/postgres 必填）
+  --db-port 端口          数据库端口（默认 3306 / 5432）
+  --db-name 库名          数据库名（需事先建好空库；MySQL 用 utf8mb4 字符集）
+  --db-user 用户名        数据库用户
+  --db-password 密码      数据库密码（也可用环境变量 WL_DB_PASSWORD 传入）
+  --db-sslmode 模式       可选：PostgreSQL 为 disable/prefer/require/verify-full；MySQL 为 true/false/skip-verify
 USAGE
 }
 
@@ -42,6 +56,13 @@ while [ $# -gt 0 ]; do
     --user) RUN_USER="$2"; shift 2 ;;
     --base-url) BASE_URL="${2%/}"; shift 2 ;;
     --demo) DEMO=1; shift ;;
+    --db-driver) DB_DRIVER="$2"; shift 2 ;;
+    --db-host) DB_HOST="$2"; shift 2 ;;
+    --db-port) DB_PORT="$2"; shift 2 ;;
+    --db-name) DB_NAME="$2"; shift 2 ;;
+    --db-user) DB_USER="$2"; shift 2 ;;
+    --db-password) DB_PASSWORD="$2"; shift 2 ;;
+    --db-sslmode) DB_SSLMODE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知参数：$1"; usage; exit 2 ;;
   esac
@@ -52,6 +73,15 @@ warn() { printf '\033[1;33m[警告]\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[错误]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "请使用 root 运行（sudo bash install.sh）。"
+case "$DB_DRIVER" in
+  sqlite) ;;
+  mysql|mariadb) DB_DRIVER=mysql ;;
+  postgres|postgresql|pgsql|pg) DB_DRIVER=postgres ;;
+  *) die "不支持的数据库类型：$DB_DRIVER（可选 sqlite / mysql / postgres）" ;;
+esac
+if [ "$DB_DRIVER" != "sqlite" ]; then
+  [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ] && [ -n "$DB_USER" ] || die "使用 $DB_DRIVER 时必须提供 --db-host、--db-name、--db-user（库需事先建好）。"
+fi
 [ "$(uname -s)" = "Linux" ] || die "该脚本只支持 Linux，Windows 请使用 install.ps1。"
 command -v systemctl >/dev/null 2>&1 || die "系统没有 systemd，无法注册服务。"
 
@@ -158,6 +188,27 @@ REQUIRE_2FA=false
 # ===== 升级源 =====
 UPDATE_BASE_URL=${BASE_URL}
 ENV
+  # ===== 数据库 =====
+  envq() { # .env 取值加引号（读取时只去掉首尾成对引号）
+    case "$1" in
+      *\"*) printf "'%s'" "$1" ;;
+      *) printf '"%s"' "$1" ;;
+    esac
+  }
+  {
+    echo ""
+    echo "# ===== 数据库 ====="
+    echo "# sqlite（默认）/ mysql（MySQL 8.0+、MariaDB 10.5+）/ postgres（PostgreSQL 12+）"
+    echo "DB_DRIVER=${DB_DRIVER}"
+    if [ "$DB_DRIVER" != "sqlite" ]; then
+      echo "DB_HOST=${DB_HOST}"
+      [ -n "$DB_PORT" ] && echo "DB_PORT=${DB_PORT}"
+      echo "DB_NAME=${DB_NAME}"
+      echo "DB_USER=${DB_USER}"
+      echo "DB_PASSWORD=$(envq "$DB_PASSWORD")"
+      [ -n "$DB_SSLMODE" ] && echo "DB_SSLMODE=${DB_SSLMODE}"
+    fi
+  } >> "$ENV_FILE"
 fi
 chown -R "$RUN_USER:$RUN_USER" "$WL_HOME"
 chmod 750 "$WL_HOME"

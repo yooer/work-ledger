@@ -2,9 +2,9 @@
 
 员工每天登录系统填写工作台账；管理员维护人员、职务、多级部门与分类；系统可**一键调用 AI 生成周报、年度总结和任意时段总结**，并提供供外部 AI 拉取数据的接口。支持 TOTP 二次验证、CSV / Excel / JSON 导入导出、整库备份恢复。
 
-本项目由 PHP 版 1:1 迁移而来：**单个可执行文件 + SQLite**，内嵌页面与静态资源，无需 PHP、Nginx、数据库服务即可运行。数据库表结构、密码哈希、TOTP 密钥、备份文件格式与 PHP 版完全兼容。
+本项目由 PHP 版 1:1 迁移而来：**单个可执行文件**，内嵌页面与静态资源，无需 PHP、Nginx 即可运行。默认使用内置 SQLite，无需数据库服务；也可以改用 **MySQL 8.0+ / MariaDB 10.5+ / PostgreSQL 12+**（见 [数据库](#13-数据库sqlite--mysql--mariadb--postgresql)）。密码哈希、TOTP 密钥、备份文件格式与 PHP 版兼容。
 
-- **技术栈**：Go（标准库 `net/http` / `html/template` / `database/sql`）、SQLite（`modernc.org/sqlite`，纯 Go，无需 CGO）
+- **技术栈**：Go（标准库 `net/http` / `html/template` / `database/sql`）；数据库驱动均为纯 Go、无需 CGO：SQLite（`modernc.org/sqlite`）、MySQL / MariaDB（`go-sql-driver/mysql`）、PostgreSQL（`jackc/pgx`）
 - **前端**：服务端渲染 + Tabler 1.7.1 + Tabler Icons 3.49 + ApexCharts / Tom Select / Litepicker，全部本地化，**不依赖任何 CDN**
 - **交互**：所有写操作统一为 Ajax `POST + JSON + action`
 - **平台**：Linux amd64 / arm64（systemd）、Windows amd64（Windows 服务）
@@ -25,6 +25,7 @@
 10. [从 PHP 版迁移](#10-从-php-版迁移)
 11. [开发说明](#11-开发说明)
 12. [常见问题](#12-常见问题)
+13. [数据库：SQLite / MySQL / MariaDB / PostgreSQL](#13-数据库sqlite--mysql--mariadb--postgresql)
 
 ---
 
@@ -53,6 +54,9 @@ curl -fsSL https://github.com/yooer/work-ledger/raw/main/deploy/install.sh | sud
 | `--user` | `work-ledger` | 运行账号（系统用户，不可登录） |
 | `--base-url` | `https://github.com/yooer/work-ledger` | 下载源 |
 | `--demo` | 关闭 | 同时创建演示部门、人员和台账 |
+| `--db-driver` | `sqlite` | 数据库类型：`sqlite` / `mysql`（MySQL、MariaDB）/ `postgres` |
+| `--db-host` `--db-port` `--db-name` `--db-user` `--db-password` | — | 使用 MySQL / PostgreSQL 时的连接信息（库需事先建好，见[第 13 节](#13-数据库sqlite--mysql--mariadb--postgresql)）；密码也可用环境变量 `WL_DB_PASSWORD` 传入 |
+| `--db-sslmode` | — | 可选，见第 13 节 |
 
 脚本会：识别 CPU 架构 → 下载程序与 `sha256sums.txt` 并校验 → 创建系统用户和目录 → 生成配置文件（随机生成 AI 接口令牌，权限 600）→ 初始化数据库并创建管理员 → 注册 `work-ledger.service`（开机自启）并启动 → 创建 `/usr/local/bin/wlctl`。
 
@@ -118,10 +122,11 @@ sudo systemctl start work-ledger
 | `wlctl check` | 检查最新版本（读取 `releases/latest/download/version.json`，不依赖 GitHub API） |
 | `sudo wlctl upgrade [vX.Y.Z]` | 升级到最新或指定版本 |
 | `sudo wlctl rollback [--with-db]` | 回滚到升级前的程序（`--with-db` 同时恢复升级前数据库） |
-| `wlctl backup` | 立即生成一份数据库文件备份（`backups/manual-*.sqlite`） |
+| `wlctl backup` | 立即备份数据库：SQLite 为数据库文件 `backups/manual-*.sqlite`，MySQL / PostgreSQL 为 `backups/manual-*.json.gz`（与页面备份同格式） |
+| `sudo wlctl migrate-db --driver …` | 把全部数据迁移到 MySQL / MariaDB / PostgreSQL（或迁回 SQLite），见[第 13 节](#13-数据库sqlite--mysql--mariadb--postgresql) |
 | `sudo wlctl uninstall [--purge]` | 移除系统服务；默认保留数据，`--purge` 删除整个运行目录 |
 
-**升级流程**（`wlctl upgrade`）：下载新程序 → 校验 sha256 → 试运行新程序 → 用 `VACUUM INTO` 备份数据库到 `backups/pre-upgrade-*.sqlite` → 停止服务 → 旧程序改名为 `work-ledger.prev` → 替换新程序 → 启动 → 30 秒内检查 `/api/v1/health`。**健康检查失败会自动换回旧程序并恢复升级前的数据库**。
+**升级流程**（`wlctl upgrade`）：下载新程序 → 校验 sha256 → 试运行新程序 → 备份数据库（SQLite 用 `VACUUM INTO` 生成 `backups/pre-upgrade-*.sqlite`，MySQL / PostgreSQL 生成 `backups/pre-upgrade-*.json.gz`）→ 停止服务 → 旧程序改名为 `work-ledger.prev` → 替换新程序 → 启动 → 30 秒内检查 `/api/v1/health`。**健康检查失败会自动换回旧程序并恢复升级前的数据库**。
 
 升级源由配置项 `UPDATE_BASE_URL` 决定，默认 `https://github.com/yooer/work-ledger`。
 
@@ -262,7 +267,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
 
 **PHP 版导出的备份可以直接在 Go 版恢复**：恢复时按原角色自动对应职务（系统管理员 / 部门经理 / 员工），主管领导等 Go 版新增信息为“未设置”。Go 版备份完整保留职务、多级部门、主管领导等信息，**不再保证能恢复到 PHP 版**（恢复到 PHP 版会丢失职务，第三级及以下部门可能显示不正确）。
 
-命令行也可以随时 `wlctl backup` 生成数据库文件副本。建议定期把 `backups/` 转存到离线位置。
+命令行也可以随时 `wlctl backup` 生成数据库备份（SQLite 为数据库文件副本，MySQL / PostgreSQL 为 `.json.gz`）。建议定期把 `backups/` 转存到离线位置。
 
 ---
 
@@ -321,7 +326,8 @@ ledger.example.com {
 cmd/work-ledger/      程序入口：serve / install / ctl / service
 internal/
   config/             读取 .env
-  db/                 SQLite 连接、建表（schema.sql 与 PHP 版一致 + sessions 表）、升级
+  db/                 数据库连接与方言转换（SQLite / MySQL / PostgreSQL）、建表（schema*.sql）、升级
+  dbtest/             测试用数据库（默认 SQLite；WL_TEST_DRIVER 指定 MySQL / PostgreSQL）
   session/            服务端会话（sessions 表）
   web/                请求上下文、模板渲染、Ajax 分发（POST + JSON + action）、守卫、Markdown、分页
   validator/          每个 action 的入参验证器（格式 / 范围 / 必填）
@@ -351,7 +357,12 @@ go run ./cmd/work-ledger serve
 ```bash
 bash scripts/check-rules.sh   # Controller 不碰数据库、无内联样式、无外部 CDN、Ajax 统一入口
 go vet ./... && go test ./...
+
+# 在 MySQL / PostgreSQL 上跑同一套测试（每个测试自动建立并删除临时库，需要建库权限）
+WL_TEST_DRIVER=postgres WL_TEST_HOST=127.0.0.1 WL_TEST_USER=postgres WL_TEST_PASSWORD=... go test -p 1 ./internal/...
 ```
+
+CI 会在 SQLite、MySQL 8.0、MariaDB 10.11、PostgreSQL 12 / 16 上各跑一遍全部测试。
 
 **Ajax 约定**：每个模块一个入口（如 `POST /records/ajax`），请求体为 JSON，必须带 `action`；CSRF 令牌放在请求头 `X-CSRF-Token`。文件上传（导入、恢复）使用 `multipart/form-data` 并同样带 `action`；文件下载使用 GET；`/api/v1/*` 保持原协议。
 
@@ -376,3 +387,63 @@ go vet ./... && go test ./...
 ---
 
 AI 服务生成的内容会把台账数据发送到所配置的大模型服务商，请遵守本单位的数据安全规定；涉及敏感客户信息时建议使用私有化模型。
+
+---
+
+## 13. 数据库：SQLite / MySQL / MariaDB / PostgreSQL
+
+默认使用内置 SQLite（`data/app.sqlite`），单机几百人规模完全够用，无需任何数据库服务。需要集中管理数据库时，可以改用：
+
+| 数据库 | 最低版本 | `DB_DRIVER` | 默认端口 |
+| --- | --- | --- | --- |
+| MySQL | 8.0 | `mysql` | 3306 |
+| MariaDB | 10.5 | `mysql` | 3306 |
+| PostgreSQL | 12 | `postgres` | 5432 |
+
+启动时会检查数据库版本，低于最低版本直接报错退出（部门层级、主管领导依赖递归查询，MySQL 5.7 不支持）。
+
+**1. 事先建好空库和账号**（程序启动时自动建表）：
+
+```sql
+-- MySQL / MariaDB
+CREATE DATABASE work_ledger CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'wl'@'%' IDENTIFIED BY '强密码';
+GRANT ALL PRIVILEGES ON work_ledger.* TO 'wl'@'%';
+
+-- PostgreSQL
+CREATE USER wl WITH PASSWORD '强密码';
+CREATE DATABASE work_ledger OWNER wl;
+```
+
+**2. 配置**（`config/.env`，或一键安装时用 `--db-*` 参数）：
+
+```ini
+DB_DRIVER=mysql          # 或 postgres
+DB_HOST=192.168.1.10
+DB_PORT=3306             # 可省略，默认 3306 / 5432
+DB_NAME=work_ledger
+DB_USER=wl
+DB_PASSWORD="强密码"
+DB_SSLMODE=              # 可选：PostgreSQL 为 disable/prefer/require/verify-full（默认 prefer）；MySQL 为 true/false/skip-verify（默认不加密）
+```
+
+**3. 把现有 SQLite 数据迁过去**，两种方式任选：
+
+- **迁移命令（推荐）**：
+
+  ```bash
+  sudo wlctl migrate-db --driver mysql --host 192.168.1.10 --name work_ledger --user wl
+  ```
+
+  密码会提示输入（不回显），也可 `echo '密码' | sudo wlctl migrate-db …`。命令依次：检查目标库可连接、版本满足且为空库（已有数据则拒绝，不会覆盖）→ 暂停服务 → 在 `backups/` 留一份 `pre-migrate-*.json.gz` → 在目标库建表并在一个事务中写入全部数据 → 逐表核对行数 → 改写 `config/.env`（原文件备份为 `.env.bak-时间`）→ 启动服务并做健康检查。任何一步失败都不会修改配置，服务继续使用原数据库。**原 SQLite 文件保持不动**；要改回，用 `sudo wlctl migrate-db --driver sqlite --path 新文件` 迁回，或把 `.env.bak-*` 复制回去并重启（迁移后新产生的数据不会带回）。命令支持任意两种数据库之间互迁。
+
+- **手动（备份 + 恢复）**：
+  1. 在“数据备份”页下载压缩备份；
+  2. 按第 2 步修改 `config/.env`；
+  3. 初始化新库并创建临时管理员：`sudo -u work-ledger env WL_HOME=/home/work-ledger /home/work-ledger/bin/work-ledger install --admin-password=临时密码`；
+  4. `sudo wlctl restart`，用 `admin` / 临时密码登录，在“数据备份”页上传第 1 步的备份恢复（恢复后用原来的账号密码登录）。
+
+  注意：FTP 密码不在备份文件中，恢复后需要在数据备份页重新填写。
+
+**使用 MySQL / PostgreSQL 时**：页面备份恢复、每日自动备份与 FTP 上传照常可用；`wlctl backup` 和升级前备份改为生成 `.json.gz`，升级失败时自动换回旧程序并用它恢复数据；“系统与 AI”页显示当前数据库类型和版本。数据库本身的备份、主从、权限等仍建议由 DBA 按常规方式管理。`wlctl uninstall --purge` 只删除运行目录，不会删除 MySQL / PostgreSQL 中的数据库。
+

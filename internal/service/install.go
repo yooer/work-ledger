@@ -102,9 +102,15 @@ func Install(c *Core, opt InstallOptions) (*InstallResult, error) {
 	}
 	if customerID, ok := catMap["集客业务"]; ok {
 		for i, name := range []string{"集团专线", "政企云", "视频监控", "物联网", "其他集客项目"} {
+			n, err := db.Int(c.DB, "SELECT COUNT(*) FROM project_categories WHERE work_category_id = ? AND LOWER(name) = LOWER(?)", customerID, name)
+			if err != nil {
+				return nil, err
+			}
+			if n > 0 {
+				continue
+			}
 			if _, err := db.Exec(c.DB, `INSERT INTO project_categories (work_category_id, name, is_active, sort_order, created_at, updated_at)
-				SELECT ?, ?, 1, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM project_categories WHERE work_category_id = ? AND name = ?)`,
-				customerID, name, i+1, ts, ts, customerID, name); err != nil {
+				VALUES (?, ?, 1, ?, ?, ?)`, customerID, name, i+1, ts, ts); err != nil {
 				return nil, err
 			}
 		}

@@ -61,7 +61,9 @@ const Usage = `wlctl —— 工作台账服务管理工具
                          备份数据库 → 替换程序 → 重启 → 健康检查，失败自动回滚
       --file 路径        使用本地离线程序文件升级（需同时提供 --sha256 或跳过校验 --no-verify）
   rollback [--with-db]   回滚到升级前的程序版本（--with-db 同时恢复升级前的数据库）
-  backup                 立即生成一份数据库文件备份到 backups/
+  backup                 立即备份数据库到 backups/（SQLite 为数据库文件，MySQL/PostgreSQL 为 .json.gz）
+  migrate-db --driver …  把全部数据迁移到 MySQL / MariaDB / PostgreSQL（或迁回 SQLite），
+                         自动改写配置并重启服务；原数据库不动（详见 wlctl migrate-db -h）
   uninstall [--purge]    停止并移除系统服务；默认保留数据，--purge 同时删除整个运行目录
 
 升级源：配置项 UPDATE_BASE_URL（默认 https://github.com/yooer/work-ledger）。
@@ -114,6 +116,8 @@ func (c *Ctl) Run(args []string) error {
 			return err
 		}
 		return c.Rollback(*withDB)
+	case "migrate-db":
+		return c.MigrateDB(rest)
 	case "backup":
 		p, err := c.BackupDB("manual")
 		if err == nil {
@@ -206,11 +210,7 @@ func (c *Ctl) Status() error {
 	} else {
 		c.printf("健康检查：正常（%s）\n", c.healthURL())
 	}
-	if info, err := os.Stat(c.Cfg.DB.SQLitePath); err == nil {
-		c.printf("数据库：  %s（%.1f MB）\n", c.Cfg.DB.SQLitePath, float64(info.Size())/(1<<20))
-	} else {
-		c.printf("数据库：  %s（不存在）\n", c.Cfg.DB.SQLitePath)
-	}
+	c.printf("数据库：  %s\n", c.dbStatus())
 	if latest := latestFile(c.Cfg.Paths.Backups); latest != "" {
 		c.printf("最近备份：%s\n", latest)
 	}
@@ -560,10 +560,9 @@ func (c *Ctl) Upgrade(tag, localFile, localSum string, noVerify, yes bool) error
 	if err := os.Rename(prev, c.Bin); err != nil {
 		return fmt.Errorf("回滚程序失败，请手动处理：%w", err)
 	}
-	if err := restoreDBFile(dbBackup, c.Cfg.DB.SQLitePath); err != nil {
+	if err := restoreBackupFile(c.Cfg, dbBackup); err != nil {
 		c.printf("恢复数据库失败：%v（备份文件：%s）\n", err, dbBackup)
 	}
-	fixOwner(c.Cfg.DB.SQLitePath, c.Cfg.Paths.Home)
 	if err := controlService("start"); err != nil {
 		return fmt.Errorf("回滚后启动失败：%w", err)
 	}
@@ -596,11 +595,10 @@ func (c *Ctl) Rollback(withDB bool) error {
 		raw, err := os.ReadFile(filepath.Join(c.Cfg.Paths.Backups, ".last-upgrade"))
 		if err != nil {
 			c.printf("没有找到升级前数据库备份记录，跳过数据库恢复。\n")
-		} else if err := restoreDBFile(strings.TrimSpace(string(raw)), c.Cfg.DB.SQLitePath); err != nil {
+		} else if err := restoreBackupFile(c.Cfg, strings.TrimSpace(string(raw))); err != nil {
 			c.printf("恢复数据库失败：%v\n", err)
 		} else {
 			c.printf("已恢复升级前数据库：%s\n", strings.TrimSpace(string(raw)))
-			fixOwner(c.Cfg.DB.SQLitePath, c.Cfg.Paths.Home)
 		}
 	}
 	if err := controlService("start"); err != nil {
@@ -613,7 +611,7 @@ func (c *Ctl) Rollback(withDB bool) error {
 	return nil
 }
 
-// BackupDB 调用本程序（与服务同一版本）生成一致的 SQLite 备份文件。
+// BackupDB 生成一致的数据库备份（SQLite 为数据库文件，MySQL / PostgreSQL 为 .json.gz）。
 func (c *Ctl) BackupDB(prefix string) (string, error) {
 	return snapshotDB(c.Cfg, prefix)
 }

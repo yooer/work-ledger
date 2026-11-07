@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"work-ledger/internal/config"
+	"work-ledger/internal/dbtest"
 	"work-ledger/internal/service"
 )
 
@@ -59,6 +60,7 @@ func setup(t *testing.T) (*httptest.Server, string) {
 		t.Fatal(err)
 	}
 	cfg.AI.APIToken = "tok"
+	dbtest.Apply(cfg, dbtest.Options(t, home))
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	d, s, err := Bootstrap(cfg, log)
 	if err != nil {

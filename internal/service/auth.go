@@ -73,12 +73,12 @@ func (a *Auth) Login(kv KV, login, plain string) (LoginResult, Row, error) {
 	if login == "" || plain == "" {
 		return LoginFailed, nil, apperr.New("请输入账号和密码。")
 	}
-	row, err := db.One(a.DB, "SELECT * FROM users WHERE username = ? LIMIT 1", login)
+	row, err := db.One(a.DB, "SELECT * FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", login)
 	if err != nil {
 		return LoginFailed, nil, err
 	}
 	if row == nil {
-		if row, err = db.One(a.DB, "SELECT * FROM users WHERE employee_no = ? LIMIT 1", login); err != nil {
+		if row, err = db.One(a.DB, "SELECT * FROM users WHERE LOWER(employee_no) = LOWER(?) LIMIT 1", login); err != nil {
 			return LoginFailed, nil, err
 		}
 	}

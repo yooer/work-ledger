@@ -152,7 +152,8 @@ func (s *Scheduler) exists(kind, period string) (bool, error) {
 	if kind == "weekly" {
 		n, err = db.Int(s.DB, "SELECT COUNT(*) FROM weekly_reports WHERE week_start = ? AND department_id IS NULL AND employee_id IS NULL", period)
 	} else {
-		n, err = db.Int(s.DB, "SELECT COUNT(*) FROM annual_reports WHERE report_year = ? AND department_id IS NULL AND employee_id IS NULL", period)
+		year, _ := strconv.Atoi(period)
+		n, err = db.Int(s.DB, "SELECT COUNT(*) FROM annual_reports WHERE report_year = ? AND department_id IS NULL AND employee_id IS NULL", year)
 	}
 	return n > 0, err
 }

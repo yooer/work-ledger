@@ -2,7 +2,7 @@
 {{define "content"}}<div class="row row-cards mb-3">
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">AI 生成服务</div><div class="h2 mb-0 {{if .AIReady}}text-success{{else}}text-danger{{end}}">{{if .AIReady}}已配置{{else}}未配置{{end}}</div><div class="small text-secondary">OpenAI 兼容协议</div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">AI 接口令牌</div><div class="h2 mb-0 {{if .TokenReady}}text-success{{else}}text-danger{{end}}">{{if .TokenReady}}已启用{{else}}未启用{{end}}</div><div class="small text-secondary">Bearer Token</div></div></div></div>
-    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">数据库</div><div class="h2 mb-0 text-success">SQLite</div><div class="small text-secondary text-truncate" title="{{.DBPath}}">{{.DBPath}}</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">数据库</div><div class="h2 mb-0 text-success text-truncate" title="{{.DBKind}}">{{.DBKind}}</div><div class="small text-secondary text-truncate" title="{{.DBPath}}">{{.DBPath}}</div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">数据规模</div><div class="h2 mb-0">{{.Counts.records}} <small class="fs-5">条台账</small></div><div class="small text-secondary">{{.Counts.users}} 名员工 / {{.Counts.departments}} 个部门</div></div></div></div>
 </div>
 <div class="row row-cards">

@@ -3,9 +3,11 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -23,8 +25,72 @@ type App struct {
 	UpdateMirror  string // 备用下载地址（官方地址连不上时使用），为空时按内置规则推导
 }
 
+// DB 数据库连接。Driver 为 sqlite（默认）、mysql（MySQL 8.0+ / MariaDB 10.5+）或 postgres（PostgreSQL 12+）。
 type DB struct {
+	Driver     string
 	SQLitePath string
+	Host       string
+	Port       int
+	Name       string
+	User       string
+	Password   string
+	SSLMode    string // postgres：disable/prefer/require/verify-full（默认 prefer）；mysql：true/false/skip-verify（默认不加密）
+}
+
+// IsSQLite 是否使用 SQLite。
+func (d DB) IsSQLite() bool { return d.Driver == "sqlite" }
+
+// Label 用于状态显示，如 “MySQL 192.168.1.10:3306/work_ledger”。
+func (d DB) Label() string {
+	switch d.Driver {
+	case "mysql":
+		return fmt.Sprintf("MySQL/MariaDB %s:%d/%s", d.Host, d.Port, d.Name)
+	case "postgres":
+		return fmt.Sprintf("PostgreSQL %s:%d/%s", d.Host, d.Port, d.Name)
+	}
+	return "SQLite " + d.SQLitePath
+}
+
+// NormalizeDriver 统一驱动名：mariadb → mysql，pgsql/postgresql/pg → postgres，空 → sqlite。
+func NormalizeDriver(v string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "sqlite", "sqlite3":
+		return "sqlite", nil
+	case "mysql", "mariadb":
+		return "mysql", nil
+	case "postgres", "postgresql", "pgsql", "pg":
+		return "postgres", nil
+	}
+	return "", fmt.Errorf("不支持的数据库类型 DB_DRIVER=%s（可选 sqlite / mysql / postgres）", v)
+}
+
+// DefaultPort 各数据库默认端口。
+func DefaultPort(driver string) int {
+	switch driver {
+	case "mysql":
+		return 3306
+	case "postgres":
+		return 5432
+	}
+	return 0
+}
+
+// Validate 检查连接参数是否齐全。
+func (d DB) Validate() error {
+	if d.IsSQLite() {
+		return nil
+	}
+	var miss []string
+	for k, v := range map[string]string{"DB_HOST": d.Host, "DB_NAME": d.Name, "DB_USER": d.User} {
+		if strings.TrimSpace(v) == "" {
+			miss = append(miss, k)
+		}
+	}
+	if len(miss) > 0 {
+		sort.Strings(miss)
+		return fmt.Errorf("使用 %s 时必须配置 %s", d.Driver, strings.Join(miss, "、"))
+	}
+	return nil
 }
 
 type AI struct {
@@ -229,6 +295,20 @@ func Load(home string) (*Config, error) {
 	cfg.DB.SQLitePath = str("DB_SQLITE_PATH", filepath.Join(cfg.Paths.Data, "app.sqlite"))
 	if !filepath.IsAbs(cfg.DB.SQLitePath) {
 		cfg.DB.SQLitePath = filepath.Join(home, cfg.DB.SQLitePath)
+	}
+	driver, err := NormalizeDriver(str("DB_DRIVER", "sqlite"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.DB.Driver = driver
+	cfg.DB.Host = strings.TrimSpace(str("DB_HOST", ""))
+	cfg.DB.Port = integer("DB_PORT", DefaultPort(driver))
+	cfg.DB.Name = strings.TrimSpace(str("DB_NAME", ""))
+	cfg.DB.User = strings.TrimSpace(str("DB_USER", ""))
+	cfg.DB.Password = str("DB_PASSWORD", "")
+	cfg.DB.SSLMode = strings.TrimSpace(str("DB_SSLMODE", ""))
+	if err := cfg.DB.Validate(); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }

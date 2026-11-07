@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'dev/**']
   pull_request:
 
 jobs:
@@ -15,9 +15,63 @@ jobs:
           go-version-file: go.mod
       - name: 开发约束检查
         run: bash scripts/check-rules.sh
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal web | tee /dev/stderr)"
       - name: go vet
         run: go vet ./...
       - name: go vet (windows)
         run: GOOS=windows GOARCH=amd64 go vet ./...
-      - name: 测试
+      - name: 测试（SQLite）
         run: go test ./...
+
+  # 全部服务层与页面测试在 MySQL / MariaDB / PostgreSQL 上各跑一遍（每个测试使用独立临时库）
+  db:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mysql-8.0
+            driver: mysql
+            image: mysql:8.0
+            port: 3306
+          - name: mariadb-10.11
+            driver: mysql
+            image: mariadb:10.11
+            port: 3306
+          - name: postgres-16
+            driver: postgres
+            image: postgres:16
+            port: 5432
+          - name: postgres-12
+            driver: postgres
+            image: postgres:12
+            port: 5432
+    name: 测试（${{ matrix.name }}）
+    services:
+      db:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: rootpw
+          MARIADB_ROOT_PASSWORD: rootpw
+          POSTGRES_PASSWORD: rootpw
+        ports:
+          - 5000:${{ matrix.port }}
+        options: >-
+          --health-cmd "${{ matrix.driver == 'postgres' && 'pg_isready -U postgres' || 'mysqladmin ping -h 127.0.0.1 -prootpw || healthcheck.sh --connect' }}"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      WL_TEST_DRIVER: ${{ matrix.driver }}
+      WL_TEST_HOST: 127.0.0.1
+      WL_TEST_PORT: '5000'
+      WL_TEST_USER: ${{ matrix.driver == 'postgres' && 'postgres' || 'root' }}
+      WL_TEST_PASSWORD: rootpw
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: 测试
+        run: |
+          go test -p 1 -v -run TestTestDatabaseDriver ./internal/service/
+          go test -p 1 ./internal/service/ ./internal/server/ ./internal/db/ ./internal/ctl/

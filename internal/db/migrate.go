@@ -2,6 +2,7 @@ package db
 
 import (
 	_ "embed"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -9,21 +10,48 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+//go:embed schema_mysql.sql
+var schemaMySQL string
+
+//go:embed schema_postgres.sql
+var schemaPostgres string
+
 var commentLine = regexp.MustCompile(`(?m)^\s*--.*$`)
 
-// Migrate 建表并补齐旧版本缺失的字段/索引（与 PHP 版 install.php 的升级逻辑一致），可重复执行。
-// 返回执行过的升级说明。
-func (d *DB) Migrate() ([]string, error) {
-	var notes []string
-	sqlText := commentLine.ReplaceAllString(schemaSQL, "")
+// execSchema 依次执行建表脚本（各语句均可重复执行）。
+func (d *DB) execSchema(text string) error {
+	sqlText := commentLine.ReplaceAllString(text, "")
 	for _, stmt := range strings.Split(sqlText, ";") {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			continue
 		}
-		if _, err := d.Exec(stmt); err != nil {
-			return notes, err
+		if _, err := d.DB.Exec(stmt); err != nil { // 建表语句已是目标方言，不做转换
+			return fmt.Errorf("%w\n%s", err, firstLine(stmt))
 		}
+	}
+	return nil
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i > 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// Migrate 建表并补齐旧版本缺失的字段/索引（与 PHP 版 install.php 的升级逻辑一致），可重复执行。
+// 返回执行过的升级说明。MySQL / PostgreSQL 从 v2.0.0 起支持，建表脚本已包含全部字段。
+func (d *DB) Migrate() ([]string, error) {
+	switch d.dialect {
+	case MySQL:
+		return nil, d.execSchema(schemaMySQL)
+	case Postgres:
+		return nil, d.execSchema(schemaPostgres)
+	}
+	var notes []string
+	if err := d.execSchema(schemaSQL); err != nil {
+		return notes, err
 	}
 
 	cols, err := d.columns("users")

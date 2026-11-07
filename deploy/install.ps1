@@ -7,6 +7,9 @@
   带参数安装：
     & ([scriptblock]::Create((irm https://github.com/yooer/work-ledger/raw/main/deploy/install.ps1))) -Listen 0.0.0.0:8080 -AdminPassword '至少8位'
 
+  使用 MySQL / MariaDB / PostgreSQL（库需事先建好；MySQL 用 utf8mb4 字符集）：
+    ... -DbDriver mysql -DbHost 192.168.1.10 -DbName work_ledger -DbUser wl -DbPassword '密码'
+
   已安装时再次运行会自动转为升级（等同 wlctl upgrade）。
 #>
 param(
@@ -17,7 +20,14 @@ param(
     [string]$HomeDir = 'C:\ProgramData\work-ledger',
     [string]$BaseUrl = $(if ($env:WL_BASE_URL) { $env:WL_BASE_URL } else { 'https://github.com/yooer/work-ledger' }),
     [string]$MirrorUrl = $env:WL_MIRROR_URL,
-    [switch]$Demo
+    [switch]$Demo,
+    [string]$DbDriver = $(if ($env:WL_DB_DRIVER) { $env:WL_DB_DRIVER } else { 'sqlite' }),
+    [string]$DbHost = '',
+    [int]$DbPort = 0,
+    [string]$DbName = '',
+    [string]$DbUser = '',
+    [string]$DbPassword = $env:WL_DB_PASSWORD,
+    [string]$DbSslMode = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +36,17 @@ $ProgressPreference = 'SilentlyContinue'
 
 function Info($m) { Write-Host "==> $m" -ForegroundColor Green }
 function Die($m) { Write-Host "[错误] $m" -ForegroundColor Red; exit 1 }
+
+switch -Regex ($DbDriver.ToLower()) {
+    '^sqlite$' { $DbDriver = 'sqlite' }
+    '^(mysql|mariadb)$' { $DbDriver = 'mysql' }
+    '^(postgres|postgresql|pgsql|pg)$' { $DbDriver = 'postgres' }
+    default { Die "不支持的数据库类型：$DbDriver（可选 sqlite / mysql / postgres）" }
+}
+if ($DbDriver -ne 'sqlite' -and (-not $DbHost -or -not $DbName -or -not $DbUser)) {
+    Die "使用 $DbDriver 时必须提供 -DbHost、-DbName、-DbUser（库需事先建好）。"
+}
+function EnvQuote($v) { if ($v -like '*"*') { "'$v'" } else { '"' + $v + '"' } }
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Die '请以管理员身份运行 PowerShell。' }
@@ -107,7 +128,16 @@ REQUIRE_2FA=false
 
 # ===== 升级源 =====
 UPDATE_BASE_URL=$BaseUrl
+
+# ===== 数据库 =====
+# sqlite（默认）/ mysql（MySQL 8.0+、MariaDB 10.5+）/ postgres（PostgreSQL 12+）
+DB_DRIVER=$DbDriver
 "@
+        if ($DbDriver -ne 'sqlite') {
+            $content += "`r`nDB_HOST=$DbHost`r`nDB_NAME=$DbName`r`nDB_USER=$DbUser`r`nDB_PASSWORD=$(EnvQuote $DbPassword)`r`n"
+            if ($DbPort -gt 0) { $content += "DB_PORT=$DbPort`r`n" }
+            if ($DbSslMode) { $content += "DB_SSLMODE=$DbSslMode`r`n" }
+        }
         [IO.File]::WriteAllText($envFile, $content, (New-Object Text.UTF8Encoding($false)))
         # 仅允许管理员与 SYSTEM 访问配置文件
         icacls $envFile /inheritance:r /grant:r 'Administrators:F' 'SYSTEM:F' | Out-Null

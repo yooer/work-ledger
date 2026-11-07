@@ -113,7 +113,7 @@ func cmdInstall(args []string) error {
 		return err
 	}
 	defer d.Close()
-	fmt.Println("数据库文件：", cfg.DB.SQLitePath)
+	fmt.Println("数据库：", cfg.DB.Label())
 	res, err := service.Install(s.Core, service.InstallOptions{AdminUser: *user, AdminPassword: *pwd, Demo: *demo})
 	if err != nil {
 		return err

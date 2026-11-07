@@ -132,13 +132,13 @@ func (s *Users) resolvePosition(in *UserInput, current Row) (string, error) {
 
 func (s *Users) check(id int64, in UserInput, current Row) error {
 	fields := map[string]string{}
-	if v, err := db.Value(s.DB, "SELECT id FROM users WHERE username = ? AND id <> ?", in.Username, id); err != nil {
+	if v, err := db.Value(s.DB, "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id <> ?", in.Username, id); err != nil {
 		return err
 	} else if v != nil {
 		fields["username"] = "登录账号已存在。"
 	}
 	if in.EmployeeNo != "" {
-		if v, err := db.Value(s.DB, "SELECT id FROM users WHERE employee_no = ? AND id <> ?", in.EmployeeNo, id); err != nil {
+		if v, err := db.Value(s.DB, "SELECT id FROM users WHERE LOWER(employee_no) = LOWER(?) AND id <> ?", in.EmployeeNo, id); err != nil {
 			return err
 		} else if v != nil {
 			fields["employee_no"] = "员工工号已存在。"
