@@ -228,8 +228,14 @@ func (c *Ctl) MigrateDB(args []string) error {
 	for _, k := range keys {
 		c.printf("  %-26s %d\n", k, res.Counts[k])
 	}
-	if d == "sqlite" {
-		fixOwner(target.SQLitePath, c.Cfg.Paths.Home)
+	// 先关闭两个库再启动服务：本命令以 root 运行，SQLite 的 -wal/-shm 文件在关闭前属于 root，
+	// 服务账号会因无法写入而报 “readonly database”。关闭后再统一修正属主。
+	_ = dst.Close()
+	_ = src.Close()
+	for _, cfgDB := range []config.DB{c.Cfg.DB, target} {
+		if cfgDB.IsSQLite() {
+			fixSQLiteOwner(cfgDB.SQLitePath, c.Cfg.Paths.Home)
+		}
 	}
 
 	values := map[string]string{"DB_DRIVER": d}
@@ -257,6 +263,15 @@ func (c *Ctl) MigrateDB(args []string) error {
 	}
 	c.printf("迁移完成，服务已使用 %s。原数据库未做任何修改。\n", target.Label())
 	return nil
+}
+
+// fixSQLiteOwner 修正 SQLite 数据库文件及其 -wal / -shm 附属文件的属主。
+func fixSQLiteOwner(path, home string) {
+	for _, f := range []string{path, path + "-wal", path + "-shm"} {
+		if _, err := os.Stat(f); err == nil {
+			fixOwner(f, home)
+		}
+	}
 }
 
 func sameDB(a, b config.DB) bool {

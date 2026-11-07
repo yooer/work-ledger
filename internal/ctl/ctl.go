@@ -228,6 +228,9 @@ func latestFile(dir string) string {
 	var best string
 	var bestTime time.Time
 	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") { // 跳过 .last-upgrade 等内部标记文件
+			continue
+		}
 		if info, err := e.Info(); err == nil && !e.IsDir() && info.ModTime().After(bestTime) {
 			best, bestTime = e.Name(), info.ModTime()
 		}
