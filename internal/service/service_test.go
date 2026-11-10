@@ -374,36 +374,102 @@ func TestClearData(t *testing.T) {
 	}
 }
 
-func TestSubcategoryForAnyCategory(t *testing.T) {
+// “有子分类”开关：勾选的一级分类才能建子分类、填台账时才使用子分类；有启用子分类时不能取消勾选。
+func TestHasSubcategoriesSwitch(t *testing.T) {
 	s, _ := newTestServices(t)
 	admin := userByName(t, s, "admin")
-	// 非集客分类“日常维护”（id 2）新建子分类
+	dept := admin.Int("department_id")
+	if dept == 0 {
+		t.Fatal("demo admin should have a department")
+	}
+	// “日常维护”（id 2）未勾选：不能新建子分类
+	if _, err := s.Categories.SaveProject(ProjectInput{WorkCategoryID: 2, Name: "机房巡检", IsActive: true}); err == nil {
+		t.Fatal("subcategory created under category without has_subcategories")
+	}
+	cat := WorkCategoryInput{ID: 2, Name: "日常维护", DepartmentID: dept, HasSubcategories: true, IsActive: true}
+	if _, err := s.Categories.SaveWork(cat); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.Categories.SaveProject(ProjectInput{WorkCategoryID: 2, Name: "机房巡检", IsActive: true}); err != nil {
 		t.Fatal(err)
 	}
 	pid, _ := db.Int(s.Core.DB, "SELECT id FROM project_categories WHERE work_category_id = 2 AND name = '机房巡检'")
 	base := RecordInput{WorkCategoryID: 2, Content: "巡检", WorkAt: "2026-11-01 09:00:00", Difficulty: 2, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}}
 	if _, err := s.Records.Create(admin, base); err == nil {
-		t.Fatal("subcategory should be required when category has subcategories")
+		t.Fatal("subcategory should be required")
 	}
 	base.ProjectCategoryID = pid
 	id, err := s.Records.Create(admin, base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc, _ := s.Core.ScopeFor(admin)
-	rec, _ := s.Records.Find(sc, id)
-	if rec.Int("project_category_id") != pid {
-		t.Fatal("subcategory not saved")
+	// 子分类必须属于所选分类
+	foreign := base
+	foreign.ProjectCategoryID = 1 // 集客业务的子分类
+	if _, err := s.Records.Create(admin, foreign); err == nil {
+		t.Fatal("foreign subcategory accepted")
 	}
-	// 没有子分类的分类不需要选
-	if _, err := s.Records.Create(admin, RecordInput{WorkCategoryID: 3, Content: "例会", WorkAt: "2026-11-01 10:00:00", Difficulty: 1, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}}); err != nil {
+	// 有启用子分类时不能取消勾选
+	cat.HasSubcategories = false
+	if _, err := s.Categories.SaveWork(cat); err == nil || !strings.Contains(err.Error(), "子分类") {
+		t.Fatalf("unchecking with active subcategories: %v", err)
+	}
+	if _, err := s.Categories.SaveProject(ProjectInput{ID: pid, WorkCategoryID: 2, Name: "机房巡检", IsActive: false}); err != nil {
 		t.Fatal(err)
 	}
-	// 子分类必须属于所选分类
-	base.ProjectCategoryID = 1 // 集客业务的子分类
+	if _, err := s.Categories.SaveWork(cat); err != nil {
+		t.Fatalf("uncheck after disabling subcategories: %v", err)
+	}
+	// 取消后：不用选子分类，新台账也不能选；旧台账编辑时可保留原子分类
+	if _, err := s.Records.Create(admin, RecordInput{WorkCategoryID: 2, Content: "无子分类", WorkAt: "2026-11-01 10:00:00", Difficulty: 1, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.Records.Create(admin, base); err == nil {
-		t.Fatal("foreign subcategory accepted")
+		t.Fatal("subcategory accepted for category without has_subcategories")
+	}
+	sc, _ := s.Core.ScopeFor(admin)
+	base.Content = "编辑保留原子分类"
+	if err := s.Records.Update(sc, admin, id, base); err != nil {
+		t.Fatalf("keep old subcategory on edit: %v", err)
+	}
+	// 升级遗留：未勾选但有启用子分类——不必选，表单也不提供
+	if _, err := db.Exec(s.Core.DB, "UPDATE project_categories SET is_active = 1 WHERE id = ?", pid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Records.Create(admin, RecordInput{WorkCategoryID: 2, Content: "遗留", WorkAt: "2026-11-01 11:00:00", Difficulty: 1, WorkCount: 1, ParticipantIDs: []int64{admin.Int("id")}}); err != nil {
+		t.Fatalf("legacy unchecked category should not require subcategory: %v", err)
+	}
+	_, projects, _ := s.Categories.UsableFor(dept, 0, 0)
+	for _, p := range projects {
+		if p.Int("id") == pid {
+			t.Fatal("subcategory of unchecked category offered in form")
+		}
+	}
+	// 导入：未勾选的分类不能带子分类
+	csv := "工作分类,子分类,工作内容,日期\n日常维护,机房巡检,导入,2026-11-02 09:00\n"
+	rows, _, err := s.Import.Parse([]byte(csv), "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Import.Import(rows, ImportOptions{DefaultCreatorID: admin.Int("id"), AutoCreateCategories: true})
+	if err != nil || res.Failed != 1 || !strings.Contains(res.Errors[0].Message, "未启用子分类") {
+		t.Fatalf("import = %+v %v", res, err)
+	}
+	// 报告与接口数据不再有“集客”字段
+	d, err := s.Weekly.Data("2026-10-26", "2026-11-01", ReportTarget{}, true, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(d)
+	if strings.Contains(string(raw), "customer") {
+		t.Fatal("report data still contains customer fields")
+	}
+	// 台账内容本身可能含“集客”字样（演示数据），这里只检查提示词指令
+	msgs, _ := json.Marshal(s.Weekly.Prompt(d, "normal"))
+	for _, bad := range []string{"集客项目相关工作", "集客项目进展", "突出集客项目"} {
+		if strings.Contains(string(msgs), bad) {
+			t.Fatalf("prompt still contains %q", bad)
+		}
 	}
 }
 

@@ -598,14 +598,17 @@ func (s *Importer) importRow(tx db.Q, row ImportRow, opt ImportOptions, defCreat
 	var projectID *int64
 	needSub := false
 	if projectName == "" {
-		// 有启用子分类的分类必须带子分类（与网页填报一致）。
-		n, err := activeSubCount(tx, cat.Int("id"))
+		// 勾选了“有子分类”且有启用子分类的分类必须带子分类（与网页填报一致）。
+		n, err := requiredSubCount(tx, cat.Int("id"))
 		if err != nil {
 			return false, err
 		}
 		needSub = n > 0
 	}
 	if projectName != "" {
+		if !cat.Bool("is_customer_project") {
+			return false, rowFail("工作分类“%s”未启用子分类，该行不能填写子分类（可在分类管理中勾选“有子分类”）。", categoryName)
+		}
 		id, err := s.resolveProject(tx, cat.Int("id"), projectName, opt.AutoCreateCategories, res)
 		if err != nil {
 			return false, err

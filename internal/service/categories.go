@@ -1,14 +1,15 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
 	"work-ledger/internal/apperr"
 	"work-ledger/internal/db"
 )
 
-// Categories 工作分类与子分类（只增改、不删除）。任何一级分类都可以有子分类；
-// “集客业务”属性仅作为统计口径（报告中的集客统计），不再限制子分类。
+// Categories 工作分类与子分类（只增改、不删除）。勾选了“有子分类”的一级分类才能建子分类、填台账时才使用子分类；
+// 数据库字段 is_customer_project 沿用自旧版“集客业务”，现在表示“有子分类”（查询中以 has_subcategories 别名返回）。
 //
 // 每个一级分类属于一个部门（子分类跟随一级分类）。某部门可用的分类 = 本部门 + 全部下级部门的分类，
 // 以及升级遗留、尚未指定部门的分类（department_id 为 NULL，所有部门可用）。
@@ -18,7 +19,7 @@ type Categories struct{ *Core }
 const categoryLabelSQL = `CASE WHEN wc.department_id IS NOT NULL AND EXISTS (SELECT 1 FROM work_categories wcx WHERE LOWER(wcx.name) = LOWER(wc.name) AND wcx.id <> wc.id)
 	THEN wc.name || '（' || COALESCE((SELECT cdx.name FROM departments cdx WHERE cdx.id = wc.department_id), '') || '）' ELSE wc.name END`
 
-const categorySelect = `SELECT wc.*, ` + categoryLabelSQL + ` AS label, dpp.path AS department_path
+const categorySelect = `SELECT wc.*, wc.is_customer_project AS has_subcategories, ` + categoryLabelSQL + ` AS label, dpp.path AS department_path
 	FROM work_categories wc LEFT JOIN department_paths dpp ON dpp.id = wc.department_id`
 
 func (s *Categories) Work(activeOnly bool) ([]Row, error) {
@@ -56,7 +57,7 @@ func (s *Categories) UsableFor(deptID, keepCat, keepProj int64) (cats, projects 
 	for _, c := range allCats {
 		if c.Int("id") == keepCat || (c.Bool("is_active") && categoryUsable(c, ids, all)) {
 			cats = append(cats, c)
-			in[c.Int("id")] = true
+			in[c.Int("id")] = c.Bool("is_customer_project") // 只有“有子分类”的分类提供子分类选项
 		}
 	}
 	allP, err := s.Projects(0, false)
@@ -217,14 +218,119 @@ func (s *Categories) Overview(dept int64, unassigned bool) ([]Row, []Row, error)
 	return cats, projects, nil
 }
 
+// CategoryTree 分类管理页的树：部门（按层级）→ 一级分类 → 子分类；未指定部门的分类单独一组。
+type CategoryTree struct {
+	Roots          []*CatDeptNode
+	Unassigned     []*CatNode
+	ShowUnassigned bool
+}
+
+// CatDeptNode 部门节点。Total 为本部门及全部下级部门的一级分类数。
+type CatDeptNode struct {
+	Dept       Row
+	Categories []*CatNode
+	Children   []*CatDeptNode
+	Total      int
+}
+
+// CatNode 一级分类节点。Hidden 为“未勾选有子分类、但仍有子分类”（升级遗留，填台账时不显示）。
+type CatNode struct {
+	Cat      Row
+	Projects []Row
+	Hidden   bool
+}
+
+// Tree 组装分类树。dept>0 只显示该部门子树；unassigned 只显示未指定部门的分类。
+// 停用的部门只在其子树下有分类时显示。
+func (s *Categories) Tree(dept int64, unassigned bool) (*CategoryTree, error) {
+	cats, projects, err := s.Overview(0, false)
+	if err != nil {
+		return nil, err
+	}
+	depts, err := departmentTree(s.DB)
+	if err != nil {
+		return nil, err
+	}
+	byCat := map[int64]*CatNode{}
+	byDept := map[int64][]*CatNode{}
+	tree := &CategoryTree{ShowUnassigned: dept == 0}
+	for _, c := range cats {
+		n := &CatNode{Cat: c}
+		byCat[c.Int("id")] = n
+		if d := c.Int("department_id"); d > 0 {
+			byDept[d] = append(byDept[d], n)
+		} else {
+			tree.Unassigned = append(tree.Unassigned, n)
+		}
+	}
+	for _, p := range projects {
+		if n := byCat[p.Int("work_category_id")]; n != nil {
+			n.Projects = append(n.Projects, p)
+			n.Hidden = !n.Cat.Bool("is_customer_project")
+		}
+	}
+	// departmentTree 按先序遍历返回并带 depth：用栈还原父子关系
+	var stack []*CatDeptNode
+	var all []*CatDeptNode
+	for _, d := range depts {
+		node := &CatDeptNode{Dept: d, Categories: byDept[d.Int("id")]}
+		depth := int(d.Int("depth"))
+		if depth > len(stack) {
+			depth = len(stack)
+		}
+		stack = stack[:depth]
+		if depth == 0 {
+			tree.Roots = append(tree.Roots, node)
+		} else {
+			parent := stack[depth-1]
+			parent.Children = append(parent.Children, node)
+		}
+		stack = append(stack, node)
+		all = append(all, node)
+	}
+	var total func(n *CatDeptNode) int
+	total = func(n *CatDeptNode) int {
+		t := len(n.Categories)
+		var kids []*CatDeptNode
+		for _, c := range n.Children {
+			if ct := total(c); ct > 0 || c.Dept.Bool("is_active") {
+				kids = append(kids, c)
+				t += ct
+			}
+		}
+		n.Children = kids
+		n.Total = t
+		return t
+	}
+	var roots []*CatDeptNode
+	for _, r := range tree.Roots {
+		if t := total(r); t > 0 || r.Dept.Bool("is_active") {
+			roots = append(roots, r)
+		}
+	}
+	tree.Roots = roots
+	switch {
+	case unassigned:
+		tree.Roots, tree.ShowUnassigned = nil, true
+	case dept > 0:
+		tree.Roots = nil
+		for _, n := range all {
+			if n.Dept.Int("id") == dept {
+				tree.Roots = []*CatDeptNode{n}
+			}
+		}
+	}
+	return tree, nil
+}
+
 // WorkCategoryInput 工作分类表单。
 type WorkCategoryInput struct {
-	ID           int64
-	DepartmentID int64 // 必选
-	Name         string
-	SortOrder    int64
-	IsCustomer   bool
-	IsActive     bool
+	ID               int64
+	DepartmentID     int64 // 必选
+	Name             string
+	SortOrder        int64
+	HasSubcategories bool // 有子分类
+	IsActive         bool
 }
 
 func (s *Categories) SaveWork(in WorkCategoryInput) (bool, error) {
@@ -254,17 +360,27 @@ func (s *Categories) SaveWork(in WorkCategoryInput) (bool, error) {
 	} else if dup != nil {
 		fields["name"] = "该部门已有同名工作分类。"
 	}
+	// 已勾选“有子分类”且仍有启用的子分类时，不允许取消勾选（需先停用全部子分类）
+	if existing != nil && existing.Bool("is_customer_project") && !in.HasSubcategories {
+		n, err := activeSubCount(s.DB, in.ID)
+		if err != nil {
+			return false, err
+		}
+		if n > 0 {
+			fields["has_subcategories"] = fmt.Sprintf("该分类下还有 %d 个启用的子分类，请先停用全部子分类再取消“有子分类”。", n)
+		}
+	}
 	if len(fields) > 0 {
 		return false, apperr.Validation(fields)
 	}
 	ts := now()
 	if existing == nil {
 		_, err = db.Insert(s.DB, `INSERT INTO work_categories (name, department_id, is_customer_project, is_active, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, in.Name, in.DepartmentID, boolInt(in.IsCustomer), boolInt(in.IsActive), in.SortOrder, ts, ts)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, in.Name, in.DepartmentID, boolInt(in.HasSubcategories), boolInt(in.IsActive), in.SortOrder, ts, ts)
 		return true, err
 	}
 	_, err = db.Exec(s.DB, "UPDATE work_categories SET name = ?, department_id = ?, is_customer_project = ?, is_active = ?, sort_order = ?, updated_at = ? WHERE id = ?",
-		in.Name, in.DepartmentID, boolInt(in.IsCustomer), boolInt(in.IsActive), in.SortOrder, ts, in.ID)
+		in.Name, in.DepartmentID, boolInt(in.HasSubcategories), boolInt(in.IsActive), in.SortOrder, ts, in.ID)
 	return false, err
 }
 
@@ -298,6 +414,8 @@ func (s *Categories) SaveProject(in ProjectInput) (bool, error) {
 	fields := map[string]string{}
 	if cat == nil {
 		fields["work_category_id"] = "请选择所属的一级工作分类。"
+	} else if existing == nil && !cat.Bool("is_customer_project") {
+		fields["work_category_id"] = "该工作分类未勾选“有子分类”，不能新建子分类。"
 	} else if dup, err := db.Value(s.DB, "SELECT id FROM project_categories WHERE work_category_id = ? AND LOWER(name) = LOWER(?) AND id <> ?", in.WorkCategoryID, in.Name, in.ID); err != nil {
 		return false, err
 	} else if dup != nil {

@@ -2,7 +2,7 @@
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">台账记录</div><div class="wl-stat-value">{{$s.RecordCount}}</div><div class="small text-secondary">{{if $s.Truncated}}共 {{$s.TotalRecordCount}} 条，已截取{{else}}条{{end}}</div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">累计工作次数</div><div class="wl-stat-value">{{$s.TotalWorkCount}}</div><div class="small text-secondary">次</div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">参与人员</div><div class="wl-stat-value">{{$s.InvolvedEmployeeCount}}</div><div class="small text-secondary">人</div></div></div></div>
-    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">平均难度 / 高难度</div><div class="wl-stat-value">{{$s.AvgDifficulty}}</div><div class="small text-secondary">4-5 级 {{$s.HighDifficultyRecords}} 条 · 集客 {{$s.CustomerProjectRecords}} 条</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="text-secondary">平均难度 / 高难度</div><div class="wl-stat-value">{{$s.AvgDifficulty}}</div><div class="small text-secondary">4-5 级 {{$s.HighDifficultyRecords}} 条</div></div></div></div>
 </div>{{end}}
 
 {{define "report-scope-select"}}{{if .TargetGroups}}<div class="col-md-3"><label class="form-label">统计范围</label>
@@ -28,7 +28,7 @@
     {{if .ByCategory}}<div class="table-responsive"><table class="table table-vcenter card-table">
         <thead><tr><th>分类</th><th class="text-end">记录</th><th class="text-end">次数</th><th class="w-25">占比</th></tr></thead>
         <tbody>{{$total := .TotalWorkCount}}{{range .ByCategory}}<tr>
-            <td>{{.Category}}{{if .IsCustomerProject}} <span class="badge bg-teal-lt">集客</span>{{end}}</td>
+            <td>{{.Category}}</td>
             <td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td>
             <td><div class="d-flex align-items-center gap-2"><progress class="wl-progress" max="100" value="{{pct .WorkCount $total}}"></progress><span class="small text-secondary">{{pct .WorkCount $total}}%</span></div></td>
         </tr>{{end}}</tbody></table></div>{{else}}<div class="card-body text-secondary">暂无数据。</div>{{end}}

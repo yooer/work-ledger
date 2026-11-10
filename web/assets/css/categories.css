@@ -1,5 +1,16 @@
-/* 分类管理页 */
+/* 分类管理页：部门 → 一级分类 → 子分类 树 */
 .wl-input-mini { width: 6rem; }
-.wl-edit-table td { vertical-align: middle; }
-.wl-edit-table input[type="text"] { min-width: 10rem; }
-.wl-dept-select { min-width: 12rem; max-width: 18rem; }
+.wl-cat-tree details > summary { list-style: none; }
+.wl-cat-tree details > summary::-webkit-details-marker { display: none; }
+.wl-tree-node { margin: .25rem 0; }
+.wl-tree-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .35rem .5rem; border-radius: var(--tblr-border-radius); cursor: pointer; }
+.wl-tree-head:hover { background: var(--tblr-bg-surface-secondary); }
+.wl-tree-head::before { content: "▸"; display: inline-block; width: 1rem; color: var(--tblr-secondary); transition: transform .15s; }
+details[open] > .wl-tree-head::before { transform: rotate(90deg); }
+.wl-tree-title { display: inline-flex; align-items: center; gap: .35rem; font-weight: 600; }
+.wl-tree-cat > .wl-tree-head .wl-tree-title { font-weight: 500; }
+.wl-tree-children { margin-left: 1.1rem; padding-left: .9rem; border-left: 1px dashed var(--tblr-border-color); padding-bottom: .25rem; }
+.wl-tree-add { margin: .15rem 0 .35rem; }
+.wl-tree-form { padding: .75rem; margin-bottom: .5rem; background: var(--tblr-bg-surface-secondary); border-radius: var(--tblr-border-radius); }
+.wl-tree-leaves > li { padding: .2rem 0; }
+.wl-leaf-name { width: 14rem; max-width: 100%; }

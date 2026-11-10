@@ -1,8 +1,8 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/categories.css"}}">{{end}}
 {{define "content"}}<div class="alert alert-info">
-    <strong>数据完整性保护：</strong>分类停用后不会出现在新建台账的选项中，但历史记录仍保留原分类。子分类如需停止使用，请取消“启用”，不要删除。
+    <strong>数据完整性保护：</strong>分类和子分类不提供删除，不再使用时请取消“启用”。停用后不会出现在新建台账的选项中，历史记录仍保留原分类。
 </div>
-{{if gt .UnassignedCount 0}}<div class="alert alert-warning">有 <strong>{{.UnassignedCount}}</strong> 个工作分类还没有指定所属部门（升级前创建的），暂时对所有部门可用。请在下方逐个选择所属部门后保存。<a class="alert-link" href="/categories?dept=none">只看未指定的</a></div>{{end}}
+{{if gt .UnassignedCount 0}}<div class="alert alert-warning">有 <strong>{{.UnassignedCount}}</strong> 个工作分类还没有指定所属部门（升级前创建的），暂时对所有部门可用。请点分类右侧的“编辑”逐个选择所属部门。<a class="alert-link" href="/categories?dept=none">只看未指定的</a></div>{{end}}
 <div class="card mb-3 wl-filter-card"><div class="card-body">
     <form method="get" action="/categories" class="row g-2 align-items-end">
         <div class="col-md-5"><label class="form-label">按部门查看</label>
@@ -12,86 +12,101 @@
                 {{range .Departments}}<option value="{{.id}}"{{if same .id $.Filter.Key}} selected{{end}}>{{.label}}{{if ne .is_active 1}}（停用）{{end}}</option>{{end}}
             </select></div>
         <div class="col-md-auto d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}查看</button><a class="btn btn-link" href="/categories">重置</a></div>
-        <div class="col-12 small text-secondary">选择某个部门时，同时显示其全部下级部门的分类。</div>
+        <div class="col-12 small text-secondary">选择某个部门时，显示该部门及其全部下级部门。</div>
     </form>
 </div></div>
-<div class="card mb-4">
-    <div class="card-header">
-        <div>
-            <h3 class="card-title">01 · 工作分类</h3>
-            <div class="card-subtitle">工作内容的大分类（一级），每个分类属于一个部门。员工填台账时可选：本部门及全部下级部门的分类（上级部门的分类不可选）。每个分类都可以在下方建立子分类；有启用子分类的分类，填台账时必须选择子分类。“集客业务”仅作为报告中的集客统计口径。</div>
-        </div>
-    </div>
-    <div class="card-body border-bottom">
-        <form class="row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_work" novalidate>
-            <div class="col-md-3"><label class="form-label required">所属部门</label>
-                <select class="form-select" name="department_id" data-tom required><option value="">请选择部门</option>
-                {{range .ActiveDepartments}}<option value="{{.id}}"{{if same .id $.Filter.Key}} selected{{end}}>{{.label}}</option>{{end}}</select></div>
-            <div class="col-md-3"><label class="form-label required">新增分类名称</label><input class="form-control" type="text" name="name" placeholder="例如：客户回访" maxlength="60" required></div>
-            <div class="col-md-1"><label class="form-label">排序</label><input class="form-control" type="number" name="sort_order" value="0" min="-999" max="999"></div>
-            <div class="col-md-3 d-flex gap-3 pb-2">
-                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_customer_project" value="1"><span class="form-check-label">集客业务</span></label>
-                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label>
-            </div>
-            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">{{icon "plus"}}新增分类</button></div>
-        </form>
-    </div>
-    {{if .Categories}}<div class="table-responsive">
-        <table class="table table-vcenter card-table wl-edit-table">
-            <thead><tr><th>所属部门</th><th>分类名称</th><th>集客统计</th><th>子分类数</th><th>台账记录</th><th>排序</th><th>状态</th><th class="w-1">保存</th></tr></thead>
-            <tbody>
-            {{range .Categories}}<tr>
-                {{$cat := .}}<td><form id="wc-{{.id}}" data-ajax data-url="/categories/ajax" data-action="save_work" novalidate><input type="hidden" name="id" value="{{.id}}"></form>
-                    <select form="wc-{{.id}}" class="form-select form-select-sm wl-dept-select" name="department_id" required aria-label="所属部门">
-                        {{if not .department_id}}<option value="" selected>未指定（请选择）</option>{{end}}
-                        {{range $.Departments}}{{if or (eq .is_active 1) (same .id $cat.department_id)}}<option value="{{.id}}"{{if same .id $cat.department_id}} selected{{end}}>{{.label}}{{if ne .is_active 1}}（停用）{{end}}</option>{{end}}{{end}}
-                    </select></td>
-                <td><input form="wc-{{.id}}" class="form-control form-control-sm" type="text" name="name" value="{{.name}}" maxlength="60" required aria-label="分类名称"></td>
-                <td><label class="form-check mb-0"><input form="wc-{{.id}}" class="form-check-input" type="checkbox" name="is_customer_project" value="1"{{if eq .is_customer_project 1}} checked{{end}}><span class="form-check-label">集客业务</span></label></td>
-                <td><span class="badge bg-secondary-lt">{{.project_count}}</span></td>
-                <td><span class="badge bg-secondary-lt">{{.record_count}}</span></td>
-                <td><input form="wc-{{.id}}" class="form-control form-control-sm wl-input-mini" type="number" name="sort_order" value="{{.sort_order}}" min="-999" max="999" aria-label="排序"></td>
-                <td><label class="form-check form-switch mb-0"><input form="wc-{{.id}}" class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq .is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label></td>
-                <td><button form="wc-{{.id}}" type="submit" class="btn btn-sm btn-outline-primary">保存</button></td>
-            </tr>{{end}}
-            </tbody>
-        </table>
-    </div>{{else}}<div class="card-body text-secondary">当前范围内暂无工作分类。</div>{{end}}
-</div>
-
 <div class="card">
     <div class="card-header">
         <div>
-            <h3 class="card-title">02 · 子分类（二级）</h3>
-            <div class="card-subtitle">任何一级工作分类都可以建立子分类，子分类跟随所属一级分类的部门。子分类支持新增、改名和停用，不提供删除；创建后不能更换所属一级分类。</div>
+            <h3 class="card-title">工作分类</h3>
+            <div class="card-subtitle">部门 → 一级分类 → 子分类。员工填台账时可选本部门及全部下级部门的分类（上级部门的分类不可选）。勾选了“有子分类”的分类才能建子分类，填台账时必须选择其中一个子分类。</div>
+        </div>
+        <div class="card-actions btn-list">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-tree-all="open">全部展开</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-tree-all="close">全部折叠</button>
         </div>
     </div>
-    {{if not .Categories}}<div class="card-body"><div class="alert alert-warning mb-0">当前范围内还没有工作分类，请先在上方新增一级分类。</div></div>
-    {{else}}<div class="card-body border-bottom">
-        <form class="row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_project" novalidate>
-            <div class="col-md-3"><label class="form-label">所属工作分类</label>
-                <select class="form-select" name="work_category_id" data-tom required>{{range .Categories}}<option value="{{.id}}">{{.name}}（{{default "未指定部门" .department_path}}）{{if ne .is_active 1}}（停用）{{end}}</option>{{end}}</select></div>
-            <div class="col-md-4"><label class="form-label">新增子分类名称</label><input class="form-control" type="text" name="name" placeholder="例如：集团短信" maxlength="60" required></div>
-            <div class="col-md-2"><label class="form-label">排序</label><input class="form-control" type="number" name="sort_order" value="0" min="-999" max="999"></div>
-            <div class="col-md-1 pb-2"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label></div>
-            <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">{{icon "plus"}}新增子分类</button></div>
-        </form>
-    </div>{{end}}
-    {{if .Projects}}<div class="table-responsive">
-        <table class="table table-vcenter card-table wl-edit-table">
-            <thead><tr><th>所属工作分类</th><th>子分类名称</th><th>台账记录</th><th>排序</th><th>状态</th><th class="w-1">保存</th></tr></thead>
-            <tbody>
-            {{range .Projects}}<tr>
-                <td><form id="pc-{{.id}}" data-ajax data-url="/categories/ajax" data-action="save_project" novalidate><input type="hidden" name="id" value="{{.id}}"><input type="hidden" name="work_category_id" value="{{.work_category_id}}"></form>{{.category_name}}</td>
-                <td><input form="pc-{{.id}}" class="form-control form-control-sm" type="text" name="name" value="{{.name}}" maxlength="60" required aria-label="子分类名称"></td>
-                <td><span class="badge bg-secondary-lt">{{.record_count}}</span></td>
-                <td><input form="pc-{{.id}}" class="form-control form-control-sm wl-input-mini" type="number" name="sort_order" value="{{.sort_order}}" min="-999" max="999" aria-label="排序"></td>
-                <td><label class="form-check form-switch mb-0"><input form="pc-{{.id}}" class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq .is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label></td>
-                <td><button form="pc-{{.id}}" type="submit" class="btn btn-sm btn-outline-primary">保存</button></td>
-            </tr>{{end}}
-            </tbody>
-        </table>
-    </div>{{end}}
+    <div class="card-body wl-cat-tree">
+        {{range .Tree.Roots}}{{template "cat-dept" (dict "N" . "R" $)}}{{end}}
+        {{if and .Tree.ShowUnassigned .Tree.Unassigned}}<details class="wl-tree-node" open data-tree-key="none">
+            <summary class="wl-tree-head"><span class="wl-tree-title text-warning">{{icon "warning"}}未指定部门</span><span class="badge bg-warning-lt">分类 {{len .Tree.Unassigned}}</span></summary>
+            <div class="wl-tree-children">
+                <div class="small text-secondary mb-2">升级前创建、尚未指定部门的分类，暂时对所有部门可用；指定部门后不能改回“未指定”。</div>
+                {{range .Tree.Unassigned}}{{template "cat-node" (dict "C" . "R" $)}}{{end}}
+            </div>
+        </details>{{end}}
+        {{if not (or .Tree.Roots (and .Tree.ShowUnassigned .Tree.Unassigned))}}<div class="text-secondary">当前范围内没有部门或分类。请先在“部门管理”中新增部门。</div>{{end}}
+    </div>
 </div>{{end}}
+
+{{define "cat-dept"}}{{$n := .N}}{{$r := .R}}{{$d := $n.Dept}}<details class="wl-tree-node" open data-tree-key="d{{$d.id}}">
+    <summary class="wl-tree-head"><span class="wl-tree-title">{{icon "building"}}{{$d.name}}</span>{{if ne $d.is_active 1}}<span class="badge bg-secondary-lt">部门已停用</span>{{end}}<span class="badge bg-secondary-lt">分类 {{$n.Total}}</span></summary>
+    <div class="wl-tree-children">
+        {{if eq $d.is_active 1}}<button type="button" class="btn btn-sm btn-ghost-primary wl-tree-add" data-bs-toggle="collapse" data-bs-target="#nc-{{$d.id}}">{{icon "plus"}}新增分类</button>
+        <div class="collapse" id="nc-{{$d.id}}"><form class="wl-tree-form row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_work" novalidate>
+            <input type="hidden" name="department_id" value="{{$d.id}}">
+            <div class="col-md-4"><label class="form-label required">分类名称</label><input class="form-control form-control-sm" type="text" name="name" placeholder="例如：客户回访" maxlength="60" required></div>
+            <div class="col-md-2"><label class="form-label">排序</label><input class="form-control form-control-sm" type="number" name="sort_order" value="0" min="-999" max="999"></div>
+            <div class="col-md-4 d-flex gap-3 pb-1">
+                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="has_subcategories" value="1"><span class="form-check-label">有子分类</span></label>
+                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label>
+            </div>
+            <div class="col-md-2"><button type="submit" class="btn btn-sm btn-primary w-100">新增到“{{$d.name}}”</button></div>
+        </form></div>{{end}}
+        {{range $n.Categories}}{{template "cat-node" (dict "C" . "R" $r)}}{{end}}
+        {{range $n.Children}}{{template "cat-dept" (dict "N" . "R" $r)}}{{end}}
+    </div>
+</details>{{end}}
+
+{{define "cat-node"}}{{$node := .C}}{{$c := $node.Cat}}{{$r := .R}}<details class="wl-tree-node wl-tree-cat" open data-tree-key="c{{$c.id}}">
+    <summary class="wl-tree-head">
+        <span class="wl-tree-title">{{icon "tag"}}{{$c.name}}</span>
+        {{if eq $c.has_subcategories 1}}<span class="badge bg-teal-lt">有子分类</span>{{end}}
+        {{if ne $c.is_active 1}}<span class="badge bg-secondary-lt">已停用</span>{{end}}
+        <span class="small text-secondary">子分类 {{$c.project_count}} · 台账 {{$c.record_count}} · 排序 {{$c.sort_order}}</span>
+    </summary>
+    <div class="wl-tree-children">
+        <div class="btn-list mb-2">
+            <button type="button" class="btn btn-sm btn-ghost-secondary" data-bs-toggle="collapse" data-bs-target="#ec-{{$c.id}}">{{icon "edit"}}编辑</button>
+            {{if eq $c.has_subcategories 1}}<button type="button" class="btn btn-sm btn-ghost-primary" data-bs-toggle="collapse" data-bs-target="#np-{{$c.id}}">{{icon "plus"}}新增子分类</button>{{end}}
+        </div>
+        <div class="collapse{{if not $c.department_id}} show{{end}}" id="ec-{{$c.id}}"><form class="wl-tree-form row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_work" novalidate>
+            <input type="hidden" name="id" value="{{$c.id}}">
+            <div class="col-md-4"><label class="form-label required">所属部门</label>
+                <select class="form-select form-select-sm" name="department_id" required>
+                    {{if not $c.department_id}}<option value="" selected>未指定（请选择）</option>{{end}}
+                    {{range $r.Departments}}{{if or (eq .is_active 1) (same .id $c.department_id)}}<option value="{{.id}}"{{if same .id $c.department_id}} selected{{end}}>{{.label}}{{if ne .is_active 1}}（停用）{{end}}</option>{{end}}{{end}}
+                </select></div>
+            <div class="col-md-3"><label class="form-label required">分类名称</label><input class="form-control form-control-sm" type="text" name="name" value="{{$c.name}}" maxlength="60" required></div>
+            <div class="col-md-1"><label class="form-label">排序</label><input class="form-control form-control-sm" type="number" name="sort_order" value="{{$c.sort_order}}" min="-999" max="999"></div>
+            <div class="col-md-3 d-flex gap-3 pb-1" data-field>
+                <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="has_subcategories" value="1"{{if eq $c.has_subcategories 1}} checked{{end}}><span class="form-check-label">有子分类</span></label>
+                <label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq $c.is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label>
+            </div>
+            <div class="col-md-1"><button type="submit" class="btn btn-sm btn-primary w-100">保存</button></div>
+        </form></div>
+        {{if $node.Hidden}}<div class="alert alert-warning py-2 small mb-2">该分类未勾选“有子分类”，下面的子分类在填台账时不显示。需要使用时请编辑分类并勾选“有子分类”。</div>{{end}}
+        {{if eq $c.has_subcategories 1}}<div class="collapse" id="np-{{$c.id}}"><form class="wl-tree-form row g-2 align-items-end" data-ajax data-url="/categories/ajax" data-action="save_project" novalidate>
+            <input type="hidden" name="work_category_id" value="{{$c.id}}">
+            <div class="col-md-5"><label class="form-label required">子分类名称</label><input class="form-control form-control-sm" type="text" name="name" placeholder="例如：集团短信" maxlength="60" required></div>
+            <div class="col-md-2"><label class="form-label">排序</label><input class="form-control form-control-sm" type="number" name="sort_order" value="0" min="-999" max="999"></div>
+            <div class="col-md-2 pb-1"><label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1" checked><span class="form-check-label">启用</span></label></div>
+            <div class="col-md-3"><button type="submit" class="btn btn-sm btn-primary w-100">新增子分类</button></div>
+        </form></div>{{end}}
+        {{if $node.Projects}}<ul class="wl-tree-leaves list-unstyled mb-0">{{range $node.Projects}}<li>
+            <form class="wl-tree-leaf d-flex flex-wrap align-items-center gap-2" data-ajax data-url="/categories/ajax" data-action="save_project" novalidate>
+                <input type="hidden" name="id" value="{{.id}}"><input type="hidden" name="work_category_id" value="{{.work_category_id}}">
+                <span class="text-secondary">·</span>
+                <input class="form-control form-control-sm wl-leaf-name" type="text" name="name" value="{{.name}}" maxlength="60" required aria-label="子分类名称">
+                <input class="form-control form-control-sm wl-input-mini" type="number" name="sort_order" value="{{.sort_order}}" min="-999" max="999" aria-label="排序">
+                <label class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" name="is_active" value="1"{{if eq .is_active 1}} checked{{end}}><span class="form-check-label">启用</span></label>
+                <span class="small text-secondary">台账 {{.record_count}}</span>
+                <button type="submit" class="btn btn-sm btn-outline-primary">保存</button>
+            </form>
+        </li>{{end}}</ul>{{else if eq $c.has_subcategories 1}}<div class="small text-secondary">还没有子分类。</div>{{end}}
+    </div>
+</details>{{end}}
+
 {{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>
+<script src="{{asset "js/categories.js"}}"></script>
 <script>WL.initTom(document);</script>{{end}}

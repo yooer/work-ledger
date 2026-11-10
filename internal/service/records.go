@@ -26,7 +26,7 @@ type RecordFilter struct {
 	Q            string
 }
 
-const recordColumns = `SELECT r.*, ` + categoryLabelSQL + ` AS category_name, wc.is_customer_project,
+const recordColumns = `SELECT r.*, ` + categoryLabelSQL + ` AS category_name, wc.is_customer_project AS has_subcategories,
 	pc.name AS project_name, u.name AS creator_name, u.username AS creator_username,
 	u.employee_no AS creator_employee_no, eu.name AS editor_name,
 	d.name AS department_name, dpp.path AS department_path`
@@ -231,7 +231,8 @@ func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
 			fields["work_category_id"] = "所选工作分类不属于本部门，请重新选择。"
 		}
 	}
-	// 子分类规则：任何一级分类都可以有子分类；该分类下有启用的子分类时必须选择一个。
+	// 子分类规则：只有勾选了“有子分类”的一级分类才使用子分类；该分类下有启用的子分类时必须选择一个。
+	// 编辑旧台账时，原来选的子分类（即使分类已取消“有子分类”或子分类已停用）可以保留。
 	if cat != nil {
 		var proj Row
 		if in.ProjectCategoryID > 0 {
@@ -245,8 +246,10 @@ func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
 			fields["project_category_id"] = "所选子分类不属于该工作分类，请重新选择。"
 		case proj != nil && !proj.Bool("is_active") && !keepCurrent:
 			fields["project_category_id"] = "所选子分类已停用，请重新选择。"
+		case proj != nil && !cat.Bool("is_customer_project") && !keepCurrent:
+			fields["project_category_id"] = "该工作分类未启用子分类，请不要选择子分类。"
 		case proj == nil:
-			n, err := activeSubCount(s.DB, in.WorkCategoryID)
+			n, err := requiredSubCount(s.DB, in.WorkCategoryID)
 			if err != nil {
 				return err
 			}
@@ -344,6 +347,13 @@ func (s *Records) Update(sc Scope, user Row, id int64, in RecordInput) error {
 // activeSubCount 某一级分类下启用的子分类数量。
 func activeSubCount(q db.Q, categoryID int64) (int64, error) {
 	return db.Int(q, "SELECT COUNT(*) FROM project_categories WHERE work_category_id = ? AND is_active = 1", categoryID)
+}
+
+// requiredSubCount 填台账时必须从中选择的子分类数量：只有勾选了“有子分类”的一级分类才计入其启用的子分类。
+// （数据库字段 is_customer_project 沿用自旧版“集客业务”，现表示“有子分类”。）
+func requiredSubCount(q db.Q, categoryID int64) (int64, error) {
+	return db.Int(q, `SELECT COUNT(*) FROM project_categories pc JOIN work_categories wc ON wc.id = pc.work_category_id
+		WHERE pc.work_category_id = ? AND pc.is_active = 1 AND wc.is_customer_project = 1`, categoryID)
 }
 
 // Delete 删除台账（连同参与人员关系），返回被删除的记录供审计日志使用。

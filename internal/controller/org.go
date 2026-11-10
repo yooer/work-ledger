@@ -231,7 +231,7 @@ func (c *Controllers) savePosition(ctx *web.Ctx, in any) (any, error) {
 
 func (c *Controllers) categoriesPage(ctx *web.Ctx) error {
 	f := validator.CategoryFilter(ctx.Query())
-	cats, projects, err := c.S.Categories.Overview(f.Dept, f.Unassigned)
+	tree, err := c.S.Categories.Tree(f.Dept, f.Unassigned)
 	if err != nil {
 		return err
 	}
@@ -249,13 +249,24 @@ func (c *Controllers) categoriesPage(ctx *web.Ctx) error {
 			active = append(active, d)
 		}
 	}
-	return ctx.Render("categories/index", map[string]any{"PageTitle": "分类管理", "Active": "categories", "Categories": cats, "Projects": projects,
+	return ctx.Render("categories/index", map[string]any{"PageTitle": "分类管理", "Active": "categories", "Tree": tree,
 		"Departments": depts, "ActiveDepartments": active, "Filter": f, "UnassignedCount": unassigned})
+}
+
+// categoriesBack 保存后回到当前的分类管理页（保留部门筛选）。
+func categoriesBack(ctx *web.Ctx) string {
+	if u, err := url.Parse(ctx.R.Referer()); err == nil && u.Path == "/categories" && (u.Host == "" || u.Host == ctx.R.Host) {
+		f := validator.CategoryFilter(validator.Input{"dept": u.Query().Get("dept")})
+		if f.Key != "" {
+			return "/categories?dept=" + url.QueryEscape(f.Key)
+		}
+	}
+	return "/categories"
 }
 
 func (c *Controllers) saveWorkCategory(ctx *web.Ctx, in any) (any, error) {
 	p := in.(validator.WorkCategoryInput)
-	created, err := c.S.Categories.SaveWork(service.WorkCategoryInput{ID: p.ID, DepartmentID: p.DepartmentID, Name: p.Name, SortOrder: p.SortOrder, IsCustomer: p.IsCustomer, IsActive: p.IsActive})
+	created, err := c.S.Categories.SaveWork(service.WorkCategoryInput{ID: p.ID, DepartmentID: p.DepartmentID, Name: p.Name, SortOrder: p.SortOrder, HasSubcategories: p.HasSubcategories, IsActive: p.IsActive})
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +274,7 @@ func (c *Controllers) saveWorkCategory(ctx *web.Ctx, in any) (any, error) {
 	if created {
 		msg = "工作分类已新增。分类不会被物理删除。"
 	}
-	return web.Result{Message: msg, Redirect: "/categories", FlashOnRedirect: true}, nil
+	return web.Result{Message: msg, Redirect: categoriesBack(ctx), FlashOnRedirect: true}, nil
 }
 
 func (c *Controllers) saveProjectCategory(ctx *web.Ctx, in any) (any, error) {
@@ -276,7 +287,7 @@ func (c *Controllers) saveProjectCategory(ctx *web.Ctx, in any) (any, error) {
 	if created {
 		msg = "子分类已新增。"
 	}
-	return web.Result{Message: msg, Redirect: "/categories", FlashOnRedirect: true}, nil
+	return web.Result{Message: msg, Redirect: categoriesBack(ctx), FlashOnRedirect: true}, nil
 }
 
 func toInt(v any) int64 {

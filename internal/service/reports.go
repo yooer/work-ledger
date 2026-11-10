@@ -28,11 +28,10 @@ type ReportScope struct {
 }
 
 type CategoryStat struct {
-	Category          string `json:"category"`
-	IsCustomerProject bool   `json:"is_customer_project"`
-	RecordCount       int    `json:"record_count"`
-	WorkCount         int    `json:"work_count"`
-	DifficultyPoints  int    `json:"difficulty_points"`
+	Category         string `json:"category"`
+	RecordCount      int    `json:"record_count"`
+	WorkCount        int    `json:"work_count"`
+	DifficultyPoints int    `json:"difficulty_points"`
 }
 
 type ProjectStat struct {
@@ -67,26 +66,24 @@ type DifficultyStat struct {
 }
 
 type ReportSummary struct {
-	RecordCount              int              `json:"record_count"`
-	TotalRecordCount         int              `json:"total_record_count"`
-	ReturnedRecordCount      int              `json:"returned_record_count"`
-	Truncated                bool             `json:"truncated"`
-	TotalWorkCount           int              `json:"total_work_count"`
-	InvolvedEmployeeCount    int              `json:"involved_employee_count"`
-	ActiveDays               *int             `json:"active_days,omitempty"`
-	ActiveMonths             *int             `json:"active_months,omitempty"`
-	AvgDifficulty            float64          `json:"avg_difficulty"`
-	DifficultyPoints         int              `json:"difficulty_points"`
-	HighDifficultyRecords    int              `json:"high_difficulty_records"`
-	CustomerProjectRecords   int              `json:"customer_project_records"`
-	CustomerProjectWorkCount int              `json:"customer_project_work_count"`
-	ByDay                    *[]BucketStat    `json:"by_day,omitempty"`
-	ByMonth                  *[]BucketStat    `json:"by_month,omitempty"`
-	ByQuarter                *[]BucketStat    `json:"by_quarter,omitempty"`
-	ByCategory               []CategoryStat   `json:"by_category"`
-	ByProject                []ProjectStat    `json:"by_project"`
-	ByEmployee               []PersonStat     `json:"by_employee"`
-	ByDifficulty             []DifficultyStat `json:"by_difficulty"`
+	RecordCount           int              `json:"record_count"`
+	TotalRecordCount      int              `json:"total_record_count"`
+	ReturnedRecordCount   int              `json:"returned_record_count"`
+	Truncated             bool             `json:"truncated"`
+	TotalWorkCount        int              `json:"total_work_count"`
+	InvolvedEmployeeCount int              `json:"involved_employee_count"`
+	ActiveDays            *int             `json:"active_days,omitempty"`
+	ActiveMonths          *int             `json:"active_months,omitempty"`
+	AvgDifficulty         float64          `json:"avg_difficulty"`
+	DifficultyPoints      int              `json:"difficulty_points"`
+	HighDifficultyRecords int              `json:"high_difficulty_records"`
+	ByDay                 *[]BucketStat    `json:"by_day,omitempty"`
+	ByMonth               *[]BucketStat    `json:"by_month,omitempty"`
+	ByQuarter             *[]BucketStat    `json:"by_quarter,omitempty"`
+	ByCategory            []CategoryStat   `json:"by_category"`
+	ByProject             []ProjectStat    `json:"by_project"`
+	ByEmployee            []PersonStat     `json:"by_employee"`
+	ByDifficulty          []DifficultyStat `json:"by_difficulty"`
 }
 
 type RecordPerson struct {
@@ -98,8 +95,7 @@ type RecordPerson struct {
 }
 
 type ReportCategory struct {
-	Name              string `json:"name"`
-	IsCustomerProject bool   `json:"is_customer_project"`
+	Name string `json:"name"`
 }
 
 type ReportRecord struct {
@@ -276,7 +272,7 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 		return nil, err
 	}
 	rows, err := db.All(c.DB, `SELECT r.id, r.content, r.work_at, r.difficulty, r.work_count, r.created_at, r.updated_at,
-		`+categoryLabelSQL+` AS category_name, wc.is_customer_project, pc.name AS project_name,
+		`+categoryLabelSQL+` AS category_name, pc.name AS project_name,
 		u.id AS creator_id, u.name AS creator_name, u.username AS creator_username, u.employee_no AS creator_employee_no,
 		eu.name AS editor_name, d.name AS department_name, dpp.path AS department_path
 		FROM work_records r
@@ -334,7 +330,7 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 			parts = []RecordPerson{}
 		}
 		rec := ReportRecord{ID: r.Int("id"), WorkAt: r.Str("work_at"),
-			Category:        ReportCategory{Name: r.Str("category_name"), IsCustomerProject: r.Bool("is_customer_project")},
+			Category:        ReportCategory{Name: r.Str("category_name")},
 			ProjectCategory: strPtr(r["project_name"]), Content: r.Str("content"), Difficulty: difficulty, WorkCount: wc,
 			Creator: creator, Participants: parts, CreatedAt: r.Str("created_at"), UpdatedAt: r.Str("updated_at"), LastEditor: r.Str("editor_name")}
 		data.Records = append(data.Records, rec)
@@ -391,7 +387,7 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 
 		cs := categories[rec.Category.Name]
 		if cs == nil {
-			cs = &CategoryStat{Category: rec.Category.Name, IsCustomerProject: rec.Category.IsCustomerProject}
+			cs = &CategoryStat{Category: rec.Category.Name}
 			categories[rec.Category.Name] = cs
 			catOrder = append(catOrder, rec.Category.Name)
 		}
@@ -407,10 +403,6 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 			}
 			ps.RecordCount++
 			ps.WorkCount += wc
-		}
-		if rec.Category.IsCustomerProject {
-			sum.CustomerProjectRecords++
-			sum.CustomerProjectWorkCount += wc
 		}
 		if difficulty >= 1 && difficulty <= 5 {
 			diff[difficulty]++

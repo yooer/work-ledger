@@ -137,23 +137,23 @@ func ResetPassword(in Input) (any, error) {
 
 // WorkCategoryInput 工作分类。
 type WorkCategoryInput struct {
-	ID           int64
-	DepartmentID int64
-	Name         string
-	SortOrder    int64
-	IsCustomer   bool
-	IsActive     bool
+	ID               int64
+	DepartmentID     int64
+	Name             string
+	SortOrder        int64
+	HasSubcategories bool
+	IsActive         bool
 }
 
 func WorkCategory(in Input) (any, error) {
 	v := New(in)
 	out := WorkCategoryInput{
-		ID:           v.ID("id"),
-		DepartmentID: v.RequiredID("department_id", "所属部门"),
-		Name:         v.Raw("name"),
-		SortOrder:    v.IntRange("sort_order", "排序值", 0, -999, 999),
-		IsCustomer:   v.Bool("is_customer_project"),
-		IsActive:     v.Bool("is_active"),
+		ID:               v.ID("id"),
+		DepartmentID:     v.RequiredID("department_id", "所属部门"),
+		Name:             v.Raw("name"),
+		SortOrder:        v.IntRange("sort_order", "排序值", 0, -999, 999),
+		HasSubcategories: v.Bool("has_subcategories"),
+		IsActive:         v.Bool("is_active"),
 	}
 	lenBetween(v, "name", "分类名称", out.Name, 2, 60)
 	return out, v.Err()

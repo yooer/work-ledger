@@ -372,3 +372,40 @@ func TestCategoryDepartmentAjaxAndBackupPage(t *testing.T) {
 		t.Fatal("backup page should show schedule and auto file")
 	}
 }
+
+func TestCategoryTreePage(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	code, page := c.get("/categories")
+	if code != 200 {
+		t.Fatalf("categories page: %d", code)
+	}
+	for _, want := range []string{`data-tree-key="d1"`, `data-tree-key="none"`, `name="has_subcategories"`, "有子分类", "新增子分类"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("tree page missing %q", want)
+		}
+	}
+	for _, bad := range []string{"集客统计", `name="is_customer_project"`, "集客统计口径"} {
+		if strings.Contains(page, bad) {
+			t.Fatalf("tree page still contains %q", bad)
+		}
+	}
+	// 未勾选“有子分类”的分类不能新建子分类（日常维护 id 2）
+	if code, body := c.post("/categories/ajax", "application/json", `{"action":"save_project","work_category_id":2,"name":"机房巡检","is_active":true}`, true); code != 422 || !strings.Contains(body, "有子分类") {
+		t.Fatalf("subcategory under unchecked category: %d %s", code, body)
+	}
+	// 筛选后保存仍回到该部门
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/categories/ajax", strings.NewReader(`{"action":"save_work","name":"树状新分类","department_id":1,"has_subcategories":true,"is_active":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", c.csrf)
+	req.Header.Set("Referer", srv.URL+"/categories?dept=1")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(b), `"redirect":"/categories?dept=1"`) {
+		t.Fatalf("redirect should keep filter: %s", b)
+	}
+}
