@@ -153,7 +153,8 @@ func TestManagerScopeAndEditRules(t *testing.T) {
 	if other.Int("created_by") == manager.Int("id") {
 		other = res.Items[1]
 	}
-	edit := RecordInput{WorkCategoryID: 2, Content: "经理修正", WorkAt: "2026-10-27 10:00:00", Difficulty: 3, WorkCount: 1, ParticipantIDs: []int64{manager.Int("id")}}
+	// 参与人员只能是台账所属部门及下级部门的人（经理在上级部门，不能把自己加为参与人员），这里保留创建者
+	edit := RecordInput{WorkCategoryID: 2, Content: "经理修正", WorkAt: "2026-10-27 10:00:00", Difficulty: 3, WorkCount: 1, ParticipantIDs: []int64{other.Int("created_by")}}
 	if err := s.Records.Update(sc, manager, other.Int("id"), edit); err != nil {
 		t.Fatalf("manager edit with switch on: %v", err)
 	}
@@ -781,7 +782,7 @@ func TestParticipantVisibilityAndDelete(t *testing.T) {
 	if _, err := s.Records.Delete(wsc, wangwu, zsRec); err == nil {
 		t.Fatal("leader delete should be off by default")
 	}
-	if err := s.Settings.SetLeaderPermissions(true, true); err != nil {
+	if err := s.Settings.SetLeaderPermissions(true, true, true); err != nil {
 		t.Fatal(err)
 	}
 	// 领导不能删除团队外的人创建、下属只是参与的记录

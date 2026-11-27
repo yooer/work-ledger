@@ -24,6 +24,7 @@ const (
 	SettingSchedulerLast   = "scheduler_last_result"
 	SettingLeaderCanEdit   = "leader_can_edit_records"   // 允许主管领导/部门经理修改下属台账
 	SettingLeaderCanDelete = "leader_can_delete_records" // 允许主管领导/部门经理删除下属台账（默认关闭）
+	SettingLeaderCanHide   = "leader_can_hide_records"   // 允许主管领导/部门经理隐藏下属台账（默认开启）
 )
 
 // DefaultSettings 安装时写入的默认值（已存在则不覆盖）。自动生成默认关闭。
@@ -40,6 +41,7 @@ var DefaultSettings = map[string]string{
 	SettingAutoYearlyStyle: "normal",
 	SettingLeaderCanEdit:   "1",
 	SettingLeaderCanDelete: "0",
+	SettingLeaderCanHide:   "1",
 }
 
 type Settings struct {
@@ -96,15 +98,18 @@ func (s *Settings) LeaderCanEdit() bool { return s.Get(SettingLeaderCanEdit, "")
 // LeaderCanDelete 是否允许领导删除下属台账（未设置时默认不允许）。
 func (s *Settings) LeaderCanDelete() bool { return s.Get(SettingLeaderCanDelete, "") == "1" }
 
-// SetLeaderPermissions 保存“允许领导修改 / 删除下属台账”两个开关。
-func (s *Settings) SetLeaderPermissions(canEdit, canDelete bool) error {
+// LeaderCanHide 是否允许领导隐藏下属台账（未设置时默认允许）。
+func (s *Settings) LeaderCanHide() bool { return s.Get(SettingLeaderCanHide, "") == "1" }
+
+// SetLeaderPermissions 保存“允许领导修改 / 删除 / 隐藏下属台账”三个开关。
+func (s *Settings) SetLeaderPermissions(canEdit, canDelete, canHide bool) error {
 	flag := func(on bool) string {
 		if on {
 			return "1"
 		}
 		return "0"
 	}
-	return s.SetMany(map[string]string{SettingLeaderCanEdit: flag(canEdit), SettingLeaderCanDelete: flag(canDelete)})
+	return s.SetMany(map[string]string{SettingLeaderCanEdit: flag(canEdit), SettingLeaderCanDelete: flag(canDelete), SettingLeaderCanHide: flag(canHide)})
 }
 
 // SetLeaderCanEdit 保存“允许领导修改下属台账”开关。

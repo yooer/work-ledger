@@ -28,7 +28,7 @@ func (c *Controllers) settingsPage(ctx *web.Ctx) error {
 		"AIBaseURL": cfg.AI.BaseURL, "AIModel": cfg.AI.Model, "AppURL": cfg.App.URL, "Timezone": cfg.App.Timezone,
 		"ListenAddr": cfg.App.ListenAddr, "Home": cfg.Paths.Home, "EnvFile": cfg.Paths.EnvFile, "DBPath": dbWhere,
 		"WeekStart": c.S.Settings.WeekStartDay(), "WeekEnd": c.S.Settings.WeekEndDay(), "CycleLabel": c.S.Settings.WeekCycleLabel(),
-		"Counts": counts, "LeaderCanEdit": c.S.Settings.LeaderCanEdit(), "LeaderCanDelete": c.S.Settings.LeaderCanDelete(), "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
+		"Counts": counts, "LeaderCanEdit": c.S.Settings.LeaderCanEdit(), "LeaderCanDelete": c.S.Settings.LeaderCanDelete(), "LeaderCanHide": c.S.Settings.LeaderCanHide(), "Auto": c.S.Scheduler.Auto(), "Last": c.S.Scheduler.LastStatus(), "Styles": reportStyles,
 	})
 }
 
@@ -42,7 +42,7 @@ func (c *Controllers) saveWeekCycle(ctx *web.Ctx, in any) (any, error) {
 
 func (c *Controllers) savePermissions(ctx *web.Ctx, in any) (any, error) {
 	p := in.(validator.PermissionsInput)
-	if err := c.S.Settings.SetLeaderPermissions(p.LeaderCanEdit, p.LeaderCanDelete); err != nil {
+	if err := c.S.Settings.SetLeaderPermissions(p.LeaderCanEdit, p.LeaderCanDelete, p.LeaderCanHide); err != nil {
 		return nil, err
 	}
 	onOff := func(b bool) string {
@@ -51,7 +51,7 @@ func (c *Controllers) savePermissions(ctx *web.Ctx, in any) (any, error) {
 		}
 		return "不允许"
 	}
-	msg := "领导权限已保存：修改下属台账 " + onOff(p.LeaderCanEdit) + "，删除下属台账 " + onOff(p.LeaderCanDelete) + "。"
+	msg := "领导权限已保存：修改下属台账 " + onOff(p.LeaderCanEdit) + "，删除下属台账 " + onOff(p.LeaderCanDelete) + "，隐藏下属台账 " + onOff(p.LeaderCanHide) + "。"
 	return web.Result{Message: msg, Redirect: "/settings", FlashOnRedirect: true}, nil
 }
 

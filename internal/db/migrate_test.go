@@ -13,7 +13,7 @@ func TestMigrateAddsGoColumnsToOldDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Close()
-	oldSchema := regexp.MustCompile(`(?m)^\s*(supervisor_id|team_leader_id|position_id) .*\n`).ReplaceAllString(schemaSQL, "")
+	oldSchema := regexp.MustCompile(`(?m)^\s*(supervisor_id|team_leader_id|position_id|is_hidden|hidden_by|hidden_at) .*\n`).ReplaceAllString(schemaSQL, "")
 	oldSchema = commentLine.ReplaceAllString(oldSchema, "")
 	for _, stmt := range regexp.MustCompile(`;\s*\n`).Split(oldSchema, -1) {
 		if stmt = regexp.MustCompile(`^\s+|\s+$`).ReplaceAllString(stmt, ""); stmt != "" {
@@ -37,6 +37,9 @@ func TestMigrateAddsGoColumnsToOldDatabase(t *testing.T) {
 		if cols, _ := d.columns(tbl); !cols["team_leader_id"] {
 			t.Fatalf("%s.team_leader_id not added", tbl)
 		}
+	}
+	if cols, _ := d.columns("work_records"); !cols["is_hidden"] || !cols["hidden_by"] || !cols["hidden_at"] {
+		t.Fatal("work_records hidden columns not added")
 	}
 }
 

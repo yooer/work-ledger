@@ -63,10 +63,10 @@
         </div>
     </div>
     <div class="card">
-        <div class="card-header"><h3 class="card-title">03 · 参与人员</h3><span class="ms-auto text-secondary small">可搜索姓名、工号或部门，可多选</span></div>
+        <div class="card-header"><h3 class="card-title">03 · 参与人员</h3><span class="ms-auto text-secondary small">本部门及下级部门人员，可搜索姓名、工号或部门，可多选</span></div>
         <div class="card-body" data-field>
-            <select name="participant_ids[]" multiple data-tom data-placeholder="选择参与人员…" required>
-                {{$sel := .Selected}}{{range .People}}<option value="{{.id}}"{{if inIDs $sel .id}} selected{{end}}>{{.name}}{{if .employee_no}} · {{.employee_no}}{{end}}{{if .department_name}} · {{dept .}}{{end}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
+            <select name="participant_ids[]" multiple data-tom data-tom-short data-placeholder="选择参与人员…" required>
+                {{$sel := .Selected}}{{range .People}}<option value="{{.id}}" data-short="{{.name}}{{if ne .is_active 1}}（已停用）{{end}}"{{if inIDs $sel .id}} selected{{end}}>{{.name}}{{if .employee_no}} · {{.employee_no}}{{end}}{{if .department_name}}（{{.department_name}}）{{end}}{{if ne .is_active 1}}（已停用）{{end}}</option>{{end}}
             </select>
             <div class="form-hint mt-2">默认包含当前记录人；至少选择一人。</div>
         </div>

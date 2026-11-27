@@ -190,3 +190,14 @@ func AutoBackup(in Input) (any, error) {
 	}
 	return out, v.Err()
 }
+
+// HideInput 隐藏 / 取消隐藏台账。
+type HideInput struct {
+	ID     int64
+	Hidden bool
+}
+
+func RecordHide(in Input) (any, error) {
+	v := New(in)
+	return HideInput{ID: v.RequiredID("id", "工作记录"), Hidden: v.Bool("hidden")}, v.Err()
+}

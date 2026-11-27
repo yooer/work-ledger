@@ -329,7 +329,34 @@ func (s *Users) ResetTOTP(id int64) (Row, error) {
 	return u, err
 }
 
-// ParticipantOptions 可选参与人员：所有启用用户，加上 selected 中已停用的（编辑历史记录时保留）。
+// ParticipantOptionsFor 填写台账的可选参与人员：台账所属部门及全部下级部门的启用人员，
+// 加上 keep 中的人（已选的参与人员、创建者本人，即使不在范围内或已停用）。deptID<=0 时不限部门。
+func (s *Users) ParticipantOptionsFor(deptID int64, keep []int64) ([]Row, error) {
+	ids, all, err := categoryDeptScope(s.DB, deptID)
+	if err != nil {
+		return nil, err
+	}
+	cond := "u.is_active = 1"
+	var args []any
+	if !all {
+		cond += " AND u.department_id IN (" + db.Placeholders(len(ids)) + ")"
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+	cond = "(" + cond + ")"
+	if len(keep) > 0 {
+		cond += " OR u.id IN (" + db.Placeholders(len(keep)) + ")"
+		for _, id := range keep {
+			args = append(args, id)
+		}
+	}
+	return db.All(s.DB, `SELECT u.id, u.username, u.name, u.employee_no, u.role, u.department_id, u.is_active,
+		d.name AS department_name FROM users u LEFT JOIN departments d ON d.id = u.department_id
+		WHERE `+cond+` ORDER BY u.name`, args...)
+}
+
+// ParticipantOptions 可选人员（导入默认记录人等）：所有启用用户，加上 selected 中已停用的。
 func (s *Users) ParticipantOptions(selected []int64) ([]Row, error) {
 	cond := "u.is_active = 1"
 	var args []any

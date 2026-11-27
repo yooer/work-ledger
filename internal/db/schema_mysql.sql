@@ -107,6 +107,9 @@ CREATE TABLE IF NOT EXISTS work_records (
     updated_by BIGINT NOT NULL,
     updated_at VARCHAR(32) NOT NULL,
     import_hash VARCHAR(64) NULL,
+    is_hidden INT NOT NULL DEFAULT 0,
+    hidden_by BIGINT NULL,
+    hidden_at VARCHAR(32) NULL,
     KEY ix_work_records_work_at (work_at),
     KEY ix_work_records_category (work_category_id),
     KEY ix_work_records_project (project_category_id),
@@ -117,7 +120,8 @@ CREATE TABLE IF NOT EXISTS work_records (
     CONSTRAINT fk_work_records_project FOREIGN KEY (project_category_id) REFERENCES project_categories(id) ON DELETE RESTRICT,
     CONSTRAINT fk_work_records_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
     CONSTRAINT fk_work_records_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_work_records_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE RESTRICT
+    CONSTRAINT fk_work_records_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_work_records_hidden_by FOREIGN KEY (hidden_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS work_record_participants (

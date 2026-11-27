@@ -19,7 +19,7 @@ type Exporter struct {
 }
 
 // ExportHeaders 导出列。
-var ExportHeaders = []string{"工作分类", "工作内容", "日期", "参与人员", "难易度", "次数", "子分类", "记录人", "记录创建时间", "最后编辑用户", "最后编辑时间", "所属部门", "记录ID"}
+var ExportHeaders = []string{"工作分类", "工作内容", "日期", "参与人员", "难易度", "次数", "子分类", "记录人", "记录创建时间", "最后编辑用户", "最后编辑时间", "所属部门", "记录ID", "是否隐藏"}
 
 // ExportFile 导出结果。
 type ExportFile struct {
@@ -60,10 +60,18 @@ func tableRows(records []Row) [][]any {
 			r.Str("category_name"), r.Str("content"), timeutil.FormatDateTime(r.Str("work_at")),
 			strings.Join(participantNames(r), "、"), r.Int("difficulty"), r.Int("work_count"), r.Str("project_name"),
 			r.Str("creator_name"), timeutil.FormatDateTime(r.Str("created_at")), r.Str("editor_name"),
-			timeutil.FormatDateTime(r.Str("updated_at")), dept, r.Int("id"),
+			timeutil.FormatDateTime(r.Str("updated_at")), dept, r.Int("id"), hiddenText(r),
 		})
 	}
 	return out
+}
+
+// hiddenText 导出的“是否隐藏”列（隐藏的台账不计入总结；再导入时忽略此列）。
+func hiddenText(r Row) string {
+	if r.Bool("is_hidden") {
+		return "是"
+	}
+	return "否"
 }
 
 // csvSafe 防止 Excel 公式注入。
@@ -98,6 +106,7 @@ func (s *Exporter) Export(sc Scope, f RecordFilter, format string, meta map[stri
 			CreatedAt       string   `json:"created_at"`
 			LastEditor      string   `json:"last_editor"`
 			UpdatedAt       string   `json:"updated_at"`
+			Hidden          bool     `json:"hidden"`
 		}
 		list := make([]jsonRecord, 0, len(records))
 		for _, r := range records {
@@ -108,7 +117,8 @@ func (s *Exporter) Export(sc Scope, f RecordFilter, format string, meta map[stri
 			list = append(list, jsonRecord{ID: r.Int("id"), WorkCategory: r.Str("category_name"), WorkContent: r.Str("content"),
 				WorkAt: timeutil.FormatDateTime(r.Str("work_at")), Participants: participantNames(r), Difficulty: r.Int("difficulty"),
 				WorkCount: r.Int("work_count"), ProjectCategory: strPtr(r["project_name"]), Creator: r.Str("creator_name"), Department: dept,
-				CreatedAt: timeutil.FormatDateTime(r.Str("created_at")), LastEditor: r.Str("editor_name"), UpdatedAt: timeutil.FormatDateTime(r.Str("updated_at"))})
+				CreatedAt: timeutil.FormatDateTime(r.Str("created_at")), LastEditor: r.Str("editor_name"), UpdatedAt: timeutil.FormatDateTime(r.Str("updated_at")),
+				Hidden: r.Bool("is_hidden")})
 		}
 		meta["max_rows"], meta["truncated"] = maxRows, truncated
 		payload := map[string]any{"exported_at": timeutil.Now().Format(time.RFC3339), "count": len(list), "meta": meta, "records": list}

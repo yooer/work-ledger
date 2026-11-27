@@ -24,6 +24,7 @@ func (c *Controllers) registerRecords(app *web.App) {
 		"create": {Validate: validator.RecordCreate, Handle: c.createRecord},
 		"update": {Validate: validator.RecordUpdate, Handle: c.updateRecord},
 		"delete": {Validate: validator.ID, Handle: c.deleteRecord},
+		"hide":   {Validate: validator.RecordHide, Handle: c.hideRecord},
 	})
 }
 
@@ -103,6 +104,9 @@ func (c *Controllers) recordsPage(ctx *web.Ctx, mode string) error {
 	if err != nil {
 		return err
 	}
+	for _, r := range res.Items {
+		r["can_hide"] = c.S.Records.CanHideRecord(sc, r, ctx.User)
+	}
 	cats, projects, err := c.S.Categories.FilterOptions(sc, ctx.User)
 	if err != nil {
 		return err
@@ -146,6 +150,7 @@ func (c *Controllers) recordShow(ctx *web.Ctx) error {
 	return ctx.Render("records/show", map[string]any{
 		"PageTitle": "工作详情", "Active": "my-records", "Record": rec, "CanEdit": c.S.Records.CanEditRecord(sc, rec, ctx.User),
 		"CanDelete": c.S.Records.CanDeleteRecord(sc, rec, ctx.User), "IsCreator": rec.Int("created_by") == ctx.UserID(),
+		"CanHide": c.S.Records.CanHideRecord(sc, rec, ctx.User),
 	})
 }
 
@@ -181,10 +186,12 @@ func (c *Controllers) recordForm(ctx *web.Ctx) error {
 		}
 	}
 	deptID := ctx.User.Int("department_id")
+	keep := append([]int64{}, selected...) // 已选参与人员与创建者始终可选
 	if rec != nil {
 		deptID = rec.Int("department_id")
+		keep = append(keep, rec.Int("created_by"))
 	}
-	cats, projects, people, err := c.S.Records.FormOptions(deptID, model.ToInt(old["work_category_id"]), model.ToInt(old["project_category_id"]), selected)
+	cats, projects, people, err := c.S.Records.FormOptions(deptID, model.ToInt(old["work_category_id"]), model.ToInt(old["project_category_id"]), keep)
 	if err != nil {
 		return err
 	}
@@ -226,6 +233,26 @@ func (c *Controllers) updateRecord(ctx *web.Ctx, in any) (any, error) {
 		return nil, err
 	}
 	return web.Result{Message: "工作记录已更新。", Redirect: "/records/" + strconv.FormatInt(p.ID, 10), FlashOnRedirect: true}, nil
+}
+
+// hideRecord 隐藏 / 取消隐藏台账，并写审计日志。
+func (c *Controllers) hideRecord(ctx *web.Ctx, in any) (any, error) {
+	p := in.(validator.HideInput)
+	sc, err := c.S.Core.ScopeFor(ctx.User)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := c.S.Records.SetHidden(sc, ctx.User, p.ID, p.Hidden)
+	if err != nil {
+		return nil, err
+	}
+	act, msg := "work record shown", "已取消隐藏，这条台账重新计入总结和统计。"
+	if p.Hidden {
+		act, msg = "work record hidden", "已隐藏，这条台账不再计入总结和统计，列表中仍可看到。"
+	}
+	c.S.Core.Log.Info(act, "record_id", rec.Int("id"), "by_id", ctx.UserID(), "by", ctx.User.Str("name"),
+		"creator", rec.Str("creator_name"), "work_at", rec.Str("work_at"))
+	return web.Result{Message: msg, Reload: true}, nil
 }
 
 // deleteRecord 删除台账（二次确认在页面完成），并写审计日志。

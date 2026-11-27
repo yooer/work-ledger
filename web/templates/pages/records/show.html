@@ -8,11 +8,13 @@
             </div>
             <div class="card-actions btn-list">
                 {{if .CanEdit}}<a class="btn btn-primary" href="/records/{{$r.id}}/edit">{{icon "edit"}}编辑</a>{{end}}
+                {{if .CanHide}}{{if eq $r.is_hidden 1}}<button type="button" class="btn btn-outline-secondary" data-ajax-click data-url="/records/ajax" data-action="hide" data-payload='{"id":{{$r.id}},"hidden":false}'>{{icon "eye"}}取消隐藏</button>{{else}}<button type="button" class="btn btn-outline-secondary" data-ajax-click data-url="/records/ajax" data-action="hide" data-payload='{"id":{{$r.id}},"hidden":true}' data-confirm="隐藏后这条台账仍在列表中显示，但不再计入周报、年度、时段总结和首页统计。确定隐藏吗？">{{icon "eye-off"}}隐藏</button>{{end}}{{end}}
                 {{if .CanDelete}}<button type="button" class="btn btn-outline-danger" data-ajax-click data-url="/records/ajax" data-action="delete" data-payload='{"id":{{$r.id}}}' data-confirm="确定删除这条工作记录吗？删除后不可撤销（可通过数据备份恢复），已生成的总结文本不受影响。">{{icon "trash"}}删除</button>{{end}}
                 <button type="button" class="btn btn-outline-secondary" data-print>{{icon "print"}}打印</button>
             </div>
         </div>
         <div class="card-body">
+            {{if eq $r.is_hidden 1}}<div class="alert alert-secondary py-2">{{icon "eye-off"}} 已隐藏（{{default "—" $r.hidden_by_name}}，{{dt (str $r.hidden_at)}}）：这条台账不计入周报、年度、时段总结和首页统计。</div>{{end}}
             <div class="wl-pre fs-3 mb-4">{{$r.content}}</div>
             <div class="datagrid">
                 <div class="datagrid-item"><div class="datagrid-title">难易度</div><div class="datagrid-content">{{template "difficulty-badge" $r.difficulty}}</div></div>

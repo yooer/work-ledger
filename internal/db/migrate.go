@@ -41,14 +41,67 @@ func firstLine(s string) string {
 }
 
 // Migrate 建表并补齐旧版本缺失的字段/索引（与 PHP 版 install.php 的升级逻辑一致），可重复执行。
-// 返回执行过的升级说明。MySQL / PostgreSQL 从 v2.0.0 起支持，建表脚本已包含全部字段。
+// 返回执行过的升级说明。
 func (d *DB) Migrate() ([]string, error) {
+	var notes []string
+	var err error
 	switch d.dialect {
 	case MySQL:
-		return nil, d.execSchema(schemaMySQL)
+		err = d.execSchema(schemaMySQL)
 	case Postgres:
-		return nil, d.execSchema(schemaPostgres)
+		err = d.execSchema(schemaPostgres)
+	default:
+		notes, err = d.migrateSQLite()
 	}
+	if err != nil {
+		return notes, err
+	}
+	more, err := d.addLaterColumns()
+	return append(notes, more...), err
+}
+
+// laterColumn v2.2.0 起新增的字段：建表脚本已包含；旧库（三种数据库通用）在这里补齐。
+type laterColumn struct {
+	table, name string
+	def         map[Dialect]string
+}
+
+var laterColumns = []laterColumn{
+	// 隐藏台账：隐藏后不参与总结、首页统计与 /api/v1
+	{"work_records", "is_hidden", map[Dialect]string{SQLite: "INTEGER NOT NULL DEFAULT 0", MySQL: "INT NOT NULL DEFAULT 0", Postgres: "INTEGER NOT NULL DEFAULT 0"}},
+	{"work_records", "hidden_by", map[Dialect]string{
+		SQLite:   "INTEGER NULL REFERENCES users(id) ON DELETE SET NULL",
+		MySQL:    "BIGINT NULL, ADD CONSTRAINT fk_work_records_hidden_by FOREIGN KEY (hidden_by) REFERENCES users(id) ON DELETE SET NULL",
+		Postgres: "BIGINT NULL REFERENCES users(id) ON DELETE SET NULL"}},
+	{"work_records", "hidden_at", map[Dialect]string{SQLite: "TEXT NULL", MySQL: "VARCHAR(32) NULL", Postgres: "VARCHAR(32) NULL"}},
+}
+
+func (d *DB) addLaterColumns() ([]string, error) {
+	var notes []string
+	cache := map[string]map[string]bool{}
+	for _, c := range laterColumns {
+		cols, ok := cache[c.table]
+		if !ok {
+			var err error
+			if cols, err = d.columns(c.table); err != nil {
+				return notes, err
+			}
+			cache[c.table] = cols
+		}
+		if cols[c.name] {
+			continue
+		}
+		if _, err := d.DB.Exec("ALTER TABLE " + c.table + " ADD COLUMN " + c.name + " " + c.def[d.dialect]); err != nil {
+			return notes, fmt.Errorf("补充 %s.%s 字段失败：%w", c.table, c.name, err)
+		}
+		cols[c.name] = true
+		notes = append(notes, "已补充 "+c.table+"."+c.name+" 字段。")
+	}
+	return notes, nil
+}
+
+// migrateSQLite SQLite 建表与旧版本（含 PHP 版）升级。
+func (d *DB) migrateSQLite() ([]string, error) {
 	var notes []string
 	if err := d.execSchema(schemaSQL); err != nil {
 		return notes, err
@@ -152,7 +205,14 @@ func (d *DB) Migrate() ([]string, error) {
 }
 
 func (d *DB) columns(table string) (map[string]bool, error) {
-	rows, err := All(d, "PRAGMA table_info("+table+")")
+	q := "PRAGMA table_info(" + table + ")"
+	switch d.dialect {
+	case MySQL:
+		q = "SELECT column_name AS name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '" + table + "'"
+	case Postgres:
+		q = "SELECT column_name AS name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = '" + table + "'"
+	}
+	rows, err := All(d, q)
 	if err != nil {
 		return nil, err
 	}

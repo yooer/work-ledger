@@ -29,7 +29,7 @@ type RecordFilter struct {
 const recordColumns = `SELECT r.*, ` + categoryLabelSQL + ` AS category_name, wc.is_customer_project AS has_subcategories,
 	pc.name AS project_name, u.name AS creator_name, u.username AS creator_username,
 	u.employee_no AS creator_employee_no, eu.name AS editor_name,
-	d.name AS department_name, dpp.path AS department_path`
+	d.name AS department_name, dpp.path AS department_path, hu.name AS hidden_by_name`
 
 const recordJoins = ` FROM work_records r
 	JOIN work_categories wc ON wc.id = r.work_category_id
@@ -37,7 +37,8 @@ const recordJoins = ` FROM work_records r
 	JOIN users u ON u.id = r.created_by
 	JOIN users eu ON eu.id = r.updated_by
 	LEFT JOIN departments d ON d.id = r.department_id
-	LEFT JOIN department_paths dpp ON dpp.id = d.id`
+	LEFT JOIN department_paths dpp ON dpp.id = d.id
+	LEFT JOIN users hu ON hu.id = r.hidden_by`
 
 func (s *Records) where(sc Scope, f RecordFilter) (string, []any, error) {
 	scopeSQL, args := sc.SQL("r")
@@ -210,7 +211,8 @@ type RecordInput struct {
 
 // check 业务校验：分类/子分类是否可用、参与人员是否存在且启用。existing 为编辑前的记录；
 // deptID 为台账所属部门（新建取本人部门，编辑取台账的部门快照），分类必须在该部门可用范围内（原值可保留）。
-func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
+// creatorID 为台账创建者（参与人员可选范围之外也始终允许）。
+func (s *Records) check(in *RecordInput, existing Row, deptID, creatorID int64) error {
 	fields := map[string]string{}
 	cat, err := db.One(s.DB, "SELECT * FROM work_categories WHERE id = ?", in.WorkCategoryID)
 	if err != nil {
@@ -267,13 +269,20 @@ func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
 		for i, id := range in.ParticipantIDs {
 			args[i] = id
 		}
-		rows, err := db.All(s.DB, "SELECT id, is_active FROM users WHERE id IN ("+db.Placeholders(len(args))+")", args...)
+		rows, err := db.All(s.DB, "SELECT id, is_active, department_id FROM users WHERE id IN ("+db.Placeholders(len(args))+")", args...)
 		if err != nil {
 			return err
 		}
 		active := map[int64]bool{}
+		userDept := map[int64]int64{}
 		for _, r := range rows {
 			active[r.Int("id")] = r.Bool("is_active")
+			userDept[r.Int("id")] = r.Int("department_id")
+		}
+		// 参与人员范围：台账所属部门及全部下级部门（编辑时原有的参与人员和创建者本人始终允许）
+		scopeIDs, allDepts, err := categoryDeptScope(s.DB, deptID)
+		if err != nil {
+			return err
 		}
 		existingIDs := map[int64]bool{}
 		if existing != nil {
@@ -293,6 +302,10 @@ func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
 				fields["participant_ids"] = "参与人员中包含已停用的员工。"
 				break
 			}
+			if !allDepts && !existingIDs[id] && id != creatorID && !containsID(scopeIDs, userDept[id]) {
+				fields["participant_ids"] = "参与人员只能选择本部门及下级部门的人员。"
+				break
+			}
 		}
 	}
 	if len(fields) > 0 {
@@ -303,7 +316,7 @@ func (s *Records) check(in *RecordInput, existing Row, deptID int64) error {
 
 // Create 新建台账；记录创建者、部门快照、创建/编辑审计字段自动写入。
 func (s *Records) Create(user Row, in RecordInput) (int64, error) {
-	if err := s.check(&in, nil, user.Int("department_id")); err != nil {
+	if err := s.check(&in, nil, user.Int("department_id"), user.Int("id")); err != nil {
 		return 0, err
 	}
 	var id int64
@@ -331,7 +344,7 @@ func (s *Records) Update(sc Scope, user Row, id int64, in RecordInput) error {
 	if !s.CanEditRecord(sc, existing, user) {
 		return apperr.Forbidden("你没有修改这条工作记录的权限。")
 	}
-	if err := s.check(&in, existing, existing.Int("department_id")); err != nil {
+	if err := s.check(&in, existing, existing.Int("department_id"), existing.Int("created_by")); err != nil {
 		return err
 	}
 	return s.DB.Tx(func(tx db.Q) error {
@@ -379,6 +392,27 @@ func (s *Records) Delete(sc Scope, user Row, id int64) (Row, error) {
 	return existing, nil
 }
 
+// SetHidden 隐藏 / 取消隐藏台账（隐藏后仍在列表中显示，但不计入总结、首页统计与 /api/v1）。
+// 权限见 CanHideRecord。返回操作后的记录供审计日志使用。
+func (s *Records) SetHidden(sc Scope, user Row, id int64, hidden bool) (Row, error) {
+	existing, err := s.Find(sc, id)
+	if err != nil {
+		return nil, err
+	}
+	if !s.CanHideRecord(sc, existing, user) {
+		return nil, apperr.Forbidden("你没有隐藏或恢复这条工作记录的权限。")
+	}
+	if hidden {
+		_, err = db.Exec(s.DB, "UPDATE work_records SET is_hidden = 1, hidden_by = ?, hidden_at = ? WHERE id = ?", user.Int("id"), now(), id)
+	} else {
+		_, err = db.Exec(s.DB, "UPDATE work_records SET is_hidden = 0, hidden_by = NULL, hidden_at = NULL WHERE id = ?", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return existing, nil
+}
+
 func replaceParticipants(tx db.Q, recordID int64, ids []int64) error {
 	if _, err := db.Exec(tx, "DELETE FROM work_record_participants WHERE work_record_id = ?", recordID); err != nil {
 		return err
@@ -398,10 +432,11 @@ func replaceParticipants(tx db.Q, recordID int64, ids []int64) error {
 
 // FormOptions 台账表单所需的分类、子分类、人员选项。deptID 为台账所属部门（新建取本人部门，编辑取台账的部门快照）；
 // 停用或不在部门范围内的分类仅在编辑且为当前值时保留。
-func (s *Records) FormOptions(deptID, curCategory, curProject int64, selected []int64) (cats, projects, people []Row, err error) {
+// keep 为始终保留的人员（已选参与人员、创建者）。参与人员范围：所属部门及全部下级部门。
+func (s *Records) FormOptions(deptID, curCategory, curProject int64, keep []int64) (cats, projects, people []Row, err error) {
 	if cats, projects, err = (&Categories{Core: s.Core}).UsableFor(deptID, curCategory, curProject); err != nil {
 		return
 	}
-	people, err = (&Users{Core: s.Core}).ParticipantOptions(selected)
+	people, err = (&Users{Core: s.Core}).ParticipantOptionsFor(deptID, keep)
 	return
 }

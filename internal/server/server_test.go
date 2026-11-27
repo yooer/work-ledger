@@ -409,3 +409,30 @@ func TestCategoryTreePage(t *testing.T) {
 		t.Fatalf("redirect should keep filter: %s", b)
 	}
 }
+
+func TestHideRecordAjaxAndListIcons(t *testing.T) {
+	srv, _ := setup(t)
+	c := login(t, srv, "admin", "Admin12345")
+	_, page := c.get("/records")
+	if !strings.Contains(page, "ti-pencil") || !strings.Contains(page, `data-action="hide"`) {
+		t.Fatal("record list should show pencil icon and hide toggle")
+	}
+	if code, body := c.post("/records/ajax", "application/json", `{"action":"hide","id":1,"hidden":true}`, true); code != 200 {
+		t.Fatalf("hide: %d %s", code, body)
+	}
+	_, page = c.get("/records/1")
+	if !strings.Contains(page, "已隐藏") || !strings.Contains(page, "取消隐藏") {
+		t.Fatal("detail page should show hidden state")
+	}
+	_, page = c.get("/records")
+	if !strings.Contains(page, "wl-row-hidden") || !strings.Contains(page, ">隐藏</span>") {
+		t.Fatal("list should mark hidden record")
+	}
+	if code, body := c.post("/records/ajax", "application/json", `{"action":"hide","id":0}`, true); code != 422 {
+		t.Fatalf("invalid hide: %d %s", code, body)
+	}
+	_, page = c.get("/settings")
+	if !strings.Contains(page, `name="leader_can_hide"`) {
+		t.Fatal("settings should have leader_can_hide switch")
+	}
+}

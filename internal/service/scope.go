@@ -141,3 +141,12 @@ func (s *Records) CanEditRecord(sc Scope, record, user Row) bool {
 	}
 	return s.Settings.LeaderCanEdit() && sc.LeadsRecord(record)
 }
+
+// CanHideRecord 管理员、记录创建者可以隐藏 / 取消隐藏；系统设置允许时，主管领导/部门经理也可以操作所管辖的台账。
+// 仅作为参与人员的人不能操作。
+func (s *Records) CanHideRecord(sc Scope, record, user Row) bool {
+	if user.Str("role") == "admin" || record.Int("created_by") == user.Int("id") {
+		return true
+	}
+	return s.Settings.LeaderCanHide() && sc.LeadsRecord(record)
+}

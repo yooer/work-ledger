@@ -4,3 +4,6 @@
 .wl-difficulty-picker .form-selectgroup-label b { font-size: 1.1rem; margin-right: .25rem; }
 .wl-sticky { position: sticky; top: 1rem; }
 .ts-wrapper.is-invalid .ts-control { border-color: var(--tblr-danger); }
+
+/* 隐藏的台账：列表中照常显示，文字变淡 */
+.wl-row-hidden td { color: var(--tblr-secondary); }

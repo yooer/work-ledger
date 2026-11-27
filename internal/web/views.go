@@ -272,7 +272,7 @@ var iconMap = map[string]string{
 	"warning": "alert-triangle", "chevron": "chevron-right", "backup": "database-export", "import": "file-import",
 	"export": "file-export", "shield": "shield-lock", "key": "key", "download": "download", "upload": "upload",
 	"refresh": "refresh", "trash": "trash", "info": "info-circle", "user": "user", "robot": "robot",
-	"org": "sitemap", "badge": "id-badge-2", "team": "users-group", "eraser": "eraser",
+	"org": "sitemap", "badge": "id-badge-2", "team": "users-group", "eraser": "eraser", "pencil": "pencil", "eye-off": "eye-off",
 }
 
 // Icon 输出 Tabler 图标。

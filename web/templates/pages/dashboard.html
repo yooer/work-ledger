@@ -24,7 +24,7 @@
             <div class="card-header"><h3 class="card-title">最近的工作记录</h3><a class="ms-auto" href="{{if .IsAdmin}}/records{{else}}/my-records{{end}}">查看全部 ›</a></div>
             {{if $d.Recent}}<div class="list-group list-group-flush">{{range $d.Recent}}<a class="list-group-item list-group-item-action" href="/records/{{.id}}">
                 <div class="d-flex justify-content-between small text-secondary"><span>{{dt (str .work_at)}} · {{.category_name}}{{if .project_name}} / {{.project_name}}{{end}}</span><span>{{.creator_name}}</span></div>
-                <div>{{short (str .content) 100}}</div>
+                <div>{{if eq .is_hidden 1}}<span class="badge bg-secondary-lt me-1" title="已隐藏：不计入总结和统计">隐藏</span>{{end}}{{short (str .content) 100}}</div>
             </a>{{end}}</div>{{else}}<div class="card-body">{{template "empty" "还没有工作记录，点击右上角“填写台账”开始记录。"}}</div>{{end}}
         </div>
     </div>

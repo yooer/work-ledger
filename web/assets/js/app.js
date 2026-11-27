@@ -222,6 +222,15 @@
             // Tabler 附带的是 tom-select 精简版（不含插件），多选项可用退格键删除。
             const opts = { allowEmptyOption: true, maxOptions: 500, hidePlaceholder: false };
             if (el.dataset.placeholder) opts.placeholder = el.dataset.placeholder;
+            // data-tom-short：下拉列表显示完整信息，选中后的标签只显示 <option data-short> 的简短文字（如只显示姓名）
+            if (el.hasAttribute('data-tom-short')) {
+                opts.render = {
+                    item: (data, escape) => {
+                        const short = data.$option && data.$option.dataset.short;
+                        return '<div>' + escape(short || data.text) + '</div>';
+                    },
+                };
+            }
             new window.TomSelect(el, opts);
         });
     }

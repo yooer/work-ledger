@@ -180,7 +180,7 @@ func collect(c *Core, sp collectSpec) (*ReportData, error) {
 	if sp.MaxRecords <= 0 {
 		sp.MaxRecords = c.Cfg.Limits.MaxRecordsForAPI
 	}
-	conds := []string{"r.work_at >= ?", "r.work_at < ?"}
+	conds := []string{"r.is_hidden = 0", "r.work_at >= ?", "r.work_at < ?"} // 隐藏的台账不计入总结
 	args := []any{sp.Start + " 00:00:00", timeutil.AddDays(sp.End, 1) + " 00:00:00"}
 	scope := ReportScope{IncludeSubDepartments: sp.IncludeChildren}
 	var parts []string

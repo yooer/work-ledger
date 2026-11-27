@@ -44,15 +44,15 @@
         <table class="table table-vcenter card-table wl-record-table">
             <thead><tr><th>工作日期</th><th>分类 / 子分类</th><th>工作内容</th><th>参与人员</th><th>难度</th><th>次数</th><th>记录人</th><th class="w-1"></th></tr></thead>
             <tbody>
-            {{range .Result.Items}}<tr>
+            {{range .Result.Items}}<tr{{if eq .is_hidden 1}} class="wl-row-hidden"{{end}}>
                 <td class="text-nowrap">{{dt (str .work_at)}}</td>
                 <td><div>{{.category_name}}</div>{{if .project_name}}<div class="small text-secondary">{{.project_name}}</div>{{end}}</td>
-                <td class="wl-table-content">{{if and (eq $m.Key "mine") (not (same .created_by $.User.id))}}<span class="badge bg-azure-lt me-1">参与</span>{{end}}<a href="/records/{{.id}}" class="text-reset">{{short (str .content) 80}}</a></td>
+                <td class="wl-table-content">{{if eq .is_hidden 1}}<span class="badge bg-secondary-lt me-1" title="已隐藏：不计入总结和统计">隐藏</span>{{end}}{{if and (eq $m.Key "mine") (not (same .created_by $.User.id))}}<span class="badge bg-azure-lt me-1">参与</span>{{end}}<a href="/records/{{.id}}" class="text-reset">{{short (str .content) 80}}</a></td>
                 <td class="small">{{default "—" .participants_text}}</td>
                 <td>{{template "difficulty-badge" .difficulty}}</td>
                 <td>{{.work_count}}</td>
                 <td><div>{{.creator_name}}</div><div class="small text-secondary">{{dept .}}</div></td>
-                <td><a class="btn btn-sm btn-ghost-primary" href="/records/{{.id}}">{{icon "eye"}}</a></td>
+                <td class="text-nowrap"><a class="btn btn-sm btn-ghost-primary" href="/records/{{.id}}" title="查看详情">{{icon "pencil"}}</a>{{if .can_hide}}{{if eq .is_hidden 1}}<button type="button" class="btn btn-sm btn-ghost-secondary" data-ajax-click data-url="/records/ajax" data-action="hide" data-payload='{"id":{{.id}},"hidden":false}' title="已隐藏，点击恢复（重新计入总结）">{{icon "eye-off"}}</button>{{else}}<button type="button" class="btn btn-sm btn-ghost-secondary" data-ajax-click data-url="/records/ajax" data-action="hide" data-payload='{"id":{{.id}},"hidden":true}' data-confirm="隐藏后这条台账仍在列表中显示，但不再计入周报、年度、时段总结和首页统计。确定隐藏吗？" title="正在显示，点击隐藏（不计入总结）">{{icon "eye"}}</button>{{end}}{{end}}</td>
             </tr>{{end}}
             </tbody>
         </table>

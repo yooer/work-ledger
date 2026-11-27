@@ -32,18 +32,19 @@ type DashboardData struct {
 	SystemCounts       map[string]int64
 }
 
+// aggregate 统计时段内的台账（隐藏的台账不计入）。
 func (s *Dashboard) aggregate(sc Scope, start, end string) (PeriodStat, error) {
 	cond, args := sc.SQL("r")
 	args = append(args, start+" 00:00:00", end+" 00:00:00")
 	row, err := db.One(s.DB, `SELECT COUNT(*) AS record_count, COALESCE(SUM(r.work_count), 0) AS total_work_count,
 		COALESCE(ROUND(AVG(r.difficulty), 1), 0) AS avg_difficulty FROM work_records r
-		WHERE `+cond+` AND r.work_at >= ? AND r.work_at < ?`, args...)
+		WHERE `+cond+` AND r.is_hidden = 0 AND r.work_at >= ? AND r.work_at < ?`, args...)
 	if err != nil {
 		return PeriodStat{}, err
 	}
 	pc, err := db.Int(s.DB, `SELECT COUNT(DISTINCT p.user_id) FROM work_records r
 		JOIN work_record_participants p ON p.work_record_id = r.id
-		WHERE `+cond+` AND r.work_at >= ? AND r.work_at < ?`, args...)
+		WHERE `+cond+` AND r.is_hidden = 0 AND r.work_at >= ? AND r.work_at < ?`, args...)
 	if err != nil {
 		return PeriodStat{}, err
 	}
@@ -75,7 +76,7 @@ func (s *Dashboard) Build(user Row) (*DashboardData, error) {
 	args = append(args, monthStart.Format(timeutil.Date)+" 00:00:00", nextMonth+" 00:00:00")
 	if d.Categories, err = db.All(s.DB, `SELECT `+categoryLabelSQL+` AS name, COUNT(*) AS record_count, COALESCE(SUM(r.work_count), 0) AS total_count
 		FROM work_records r JOIN work_categories wc ON wc.id = r.work_category_id
-		WHERE `+cond+` AND r.work_at >= ? AND r.work_at < ?
+		WHERE `+cond+` AND r.is_hidden = 0 AND r.work_at >= ? AND r.work_at < ?
 		GROUP BY wc.id, wc.name ORDER BY total_count DESC, record_count DESC`, args...); err != nil {
 		return nil, err
 	}

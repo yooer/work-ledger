@@ -47,7 +47,7 @@ var backupTables = []struct {
 	{"work_categories", []string{"id", "name", "is_customer_project", "is_active", "sort_order", "created_at", "updated_at"}, []string{"department_id"}},
 	{"project_categories", []string{"id", "work_category_id", "name", "is_active", "sort_order", "created_at", "updated_at"}, nil},
 	{"work_records", []string{"id", "work_category_id", "project_category_id", "content", "work_at", "difficulty", "work_count",
-		"department_id", "created_by", "created_at", "updated_by", "updated_at", "import_hash"}, nil},
+		"department_id", "created_by", "created_at", "updated_by", "updated_at", "import_hash"}, []string{"is_hidden", "hidden_by", "hidden_at"}},
 	{"work_record_participants", []string{"work_record_id", "user_id"}, nil},
 	{"weekly_reports", []string{"id", "week_start", "week_end", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}, []string{"team_leader_id"}},
 	{"annual_reports", []string{"id", "report_year", "department_id", "employee_id", "scope_label", "content", "source", "model", "created_by", "created_at"}, []string{"team_leader_id"}},
@@ -588,14 +588,21 @@ func insertRows(tx db.Q, table string, rows []map[string]any) error {
 	return insertRowsWith(tx, table, rows, nil)
 }
 
+// optionalDefaults 旧备份（PHP 版、v2.1 及以前）缺少的非空可选字段按此默认值写入。
+var optionalDefaults = map[string]any{"is_hidden": int64(0)}
+
 func insertRowsWith(tx db.Q, table string, rows []map[string]any, nullCols map[string]bool) error {
 	cols := tableCols(table)
 	q := "INSERT INTO " + table + " (" + strings.Join(cols, ", ") + ") VALUES (" + db.Placeholders(len(cols)) + ")"
 	for i, r := range rows {
 		args := make([]any, len(cols))
 		for j, c := range cols {
-			if !nullCols[c] {
-				args[j] = sqlValue(r[c])
+			if nullCols[c] {
+				continue
+			}
+			args[j] = sqlValue(r[c])
+			if def, ok := optionalDefaults[c]; ok && args[j] == nil {
+				args[j] = def
 			}
 		}
 		if _, err := db.Exec(tx, q, args...); err != nil {
