@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{.CSRF}}">
     <title>{{.PageTitle}} · {{.App.Name}}</title>
     <link rel="icon" href="{{asset "image/favicon.svg"}}" type="image/svg+xml">
@@ -17,34 +17,13 @@
 <div class="page">
     <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
         <div class="container-fluid">
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="打开菜单">
-                <span class="navbar-toggler-icon"></span>
-            </button>
             <a class="navbar-brand navbar-brand-autodark wl-brand" href="/">
                 <span class="wl-brand-mark">{{icon "ledger"}}</span>
                 <span class="wl-brand-copy"><strong>{{.App.Name}}</strong><small>WORK LEDGER</small></span>
             </a>
             <div class="collapse navbar-collapse" id="sidebar-menu">
                 <ul class="navbar-nav pt-lg-3">
-                    <li class="nav-item wl-nav-section">日常工作</li>
-                    {{template "nav-item" (dict "Active" .Active "Key" "dashboard" "Href" "/" "Icon" "dashboard" "Label" "工作台")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "my-records" "Href" "/my-records" "Icon" "ledger" "Label" "我的台账")}}
-                    {{if .IsLeader}}{{template "nav-item" (dict "Active" .Active "Key" "team-records" "Href" "/team-records" "Icon" "team" "Label" "团队台账")}}{{end}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "reports" "Href" "/reports/weekly" "Icon" "report" "Label" "周报中心")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "annual" "Href" "/reports/yearly" "Icon" "calendar" "Label" "年度总结")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "period" "Href" "/reports/period" "Icon" "clock" "Label" "时段总结")}}
-                    {{if .IsAdmin}}
-                    <li class="nav-item wl-nav-section">系统管理</li>
-                    {{template "nav-item" (dict "Active" .Active "Key" "records" "Href" "/records" "Icon" "ledger" "Label" "全部台账")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "records-import" "Href" "/records/import" "Icon" "import" "Label" "数据导入")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "people" "Href" "/people" "Icon" "people" "Label" "人员管理")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "positions" "Href" "/positions" "Icon" "badge" "Label" "职务管理")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "org-chart" "Href" "/org-chart" "Icon" "org" "Label" "组织架构")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "departments" "Href" "/departments" "Icon" "building" "Label" "部门管理")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "categories" "Href" "/categories" "Icon" "tag" "Label" "分类管理")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "backup" "Href" "/backup" "Icon" "backup" "Label" "数据备份")}}
-                    {{template "nav-item" (dict "Active" .Active "Key" "settings" "Href" "/settings" "Icon" "settings" "Label" "系统与 AI")}}
-                    {{end}}
+                    {{template "menu-items" (dict "Mode" "side" "P" .)}}
                 </ul>
                 <div class="wl-sidebar-user mt-auto">
                     <div class="d-flex align-items-center">
@@ -69,13 +48,13 @@
             <div class="container-xl">
                 <div class="row g-2 align-items-center">
                     <div class="col">
-                        <div class="page-pretitle">工作台账系统</div>
+                        <div class="page-pretitle d-none d-lg-block">工作台账系统</div>
                         <h2 class="page-title">{{.PageTitle}}</h2>
                     </div>
                     <div class="col-auto ms-auto d-print-none">
                         <div class="btn-list">
                             <span class="btn btn-ghost-secondary d-none d-md-inline-flex wl-date-chip">{{icon "calendar"}}{{.TodayLabel}}</span>
-                            <a class="btn btn-primary" href="/records/create">{{icon "plus"}}填写台账</a>
+                            <a class="btn btn-primary d-none d-lg-inline-flex" href="/records/create">{{icon "plus"}}填写台账</a>
                         </div>
                     </div>
                 </div>
@@ -87,7 +66,7 @@
                 {{template "content" .}}
             </div>
         </div>
-        <footer class="footer footer-transparent d-print-none">
+        <footer class="footer footer-transparent d-print-none d-none d-lg-block">
             <div class="container-xl d-flex flex-wrap justify-content-between small text-secondary">
                 <span>{{.App.Name}} · 让每一份工作都有记录</span>
                 <span>{{if .User.position_name}}{{.User.position_name}}{{else}}{{role .User.role}}{{end}} · {{.DepartmentLabel}} · {{ver .App.Version}}</span>
@@ -95,6 +74,7 @@
         </footer>
     </div>
 </div>
+{{template "mobile-nav" .}}
 <div class="toast-container position-fixed top-0 end-0 p-3" id="wl-toasts"></div>
 <script src="{{asset "libs/tabler/js/tabler.min.js"}}"></script>
 <script src="{{asset "js/app.js"}}"></script>
@@ -102,9 +82,65 @@
 </body>
 </html>{{end}}
 
-{{define "nav-item"}}<li class="nav-item{{if eq .Active .Key}} active{{end}}">
+{{/* 菜单项：Mode=side 为电脑端左侧栏，Mode=sheet 为手机端“更多”菜单 */}}
+{{define "menu-items"}}{{$m := .Mode}}{{$p := .P}}
+{{template "menu-section" (dict "Mode" $m "Label" "日常工作")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "dashboard" "Href" "/" "Icon" "dashboard" "Label" "工作台")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "my-records" "Href" "/my-records" "Icon" "ledger" "Label" "我的台账")}}
+{{if $p.IsLeader}}{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "team-records" "Href" "/team-records" "Icon" "team" "Label" "团队台账")}}{{end}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "reports" "Href" "/reports/weekly" "Icon" "report" "Label" "周报中心")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "annual" "Href" "/reports/yearly" "Icon" "calendar" "Label" "年度总结")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "period" "Href" "/reports/period" "Icon" "clock" "Label" "时段总结")}}
+{{if $p.IsAdmin}}
+{{template "menu-section" (dict "Mode" $m "Label" "系统管理")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "records" "Href" "/records" "Icon" "ledger" "Label" "全部台账")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "records-import" "Href" "/records/import" "Icon" "import" "Label" "数据导入")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "people" "Href" "/people" "Icon" "people" "Label" "人员管理")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "positions" "Href" "/positions" "Icon" "badge" "Label" "职务管理")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "org-chart" "Href" "/org-chart" "Icon" "org" "Label" "组织架构")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "departments" "Href" "/departments" "Icon" "building" "Label" "部门管理")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "categories" "Href" "/categories" "Icon" "tag" "Label" "分类管理")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "backup" "Href" "/backup" "Icon" "backup" "Label" "数据备份")}}
+{{template "menu-item" (dict "Mode" $m "Active" $p.Active "Key" "settings" "Href" "/settings" "Icon" "settings" "Label" "系统与 AI")}}
+{{end}}{{end}}
+
+{{define "menu-section"}}{{if eq .Mode "side"}}<li class="nav-item wl-nav-section">{{.Label}}</li>{{else}}<div class="wl-sheet-section">{{.Label}}</div>{{end}}{{end}}
+
+{{define "menu-item"}}{{if eq .Mode "side"}}<li class="nav-item{{if eq .Active .Key}} active{{end}}">
     <a class="nav-link" href="{{.Href}}"{{if eq .Active .Key}} aria-current="page"{{end}}>
         <span class="nav-link-icon d-md-none d-lg-inline-block">{{icon .Icon}}</span>
         <span class="nav-link-title">{{.Label}}</span>
     </a>
-</li>{{end}}
+</li>{{else}}<a class="wl-sheet-item{{if eq .Active .Key}} active{{end}}" href="{{.Href}}">{{icon .Icon}}<span>{{.Label}}</span></a>{{end}}{{end}}
+
+{{/* 手机端（< 992px）：底部固定标签栏 + “更多”菜单（从底部弹出） */}}
+{{define "mobile-nav"}}{{$a := .Active}}<nav class="wl-tabbar d-lg-none d-print-none" aria-label="手机导航">
+    <a class="wl-tab{{if eq $a "dashboard"}} active{{end}}" href="/">{{icon "dashboard"}}<span>工作台</span></a>
+    <a class="wl-tab{{if eq $a "my-records"}} active{{end}}" href="/my-records">{{icon "ledger"}}<span>我的台账</span></a>
+    <a class="wl-tab wl-tab-add" href="/records/create" aria-label="填写台账"><span class="wl-tab-add-btn">{{icon "plus"}}</span><span>填写</span></a>
+    {{if .IsLeader}}<a class="wl-tab{{if eq $a "team-records"}} active{{end}}" href="/team-records">{{icon "team"}}<span>团队台账</span></a>
+    {{else}}<a class="wl-tab{{if eq $a "reports"}} active{{end}}" href="/reports/weekly">{{icon "report"}}<span>周报中心</span></a>{{end}}
+    <button class="wl-tab" type="button" data-bs-toggle="offcanvas" data-bs-target="#wl-more" aria-controls="wl-more">{{icon "menu"}}<span>更多</span></button>
+</nav>
+<div class="offcanvas offcanvas-bottom wl-sheet d-lg-none" tabindex="-1" id="wl-more" aria-labelledby="wl-more-title">
+    <div class="offcanvas-header">
+        <div class="d-flex align-items-center gap-2 min-w-0">
+            <span class="avatar avatar-sm bg-primary-lt">{{first (str .User.name)}}</span>
+            <div class="min-w-0">
+                <div class="fw-bold text-truncate" id="wl-more-title">{{.User.name}}</div>
+                <div class="small text-secondary text-truncate">{{if .User.position_name}}{{.User.position_name}}{{else}}{{role .User.role}}{{end}} · {{.DepartmentLabel}}</div>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="关闭"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="wl-sheet-grid">{{template "menu-items" (dict "Mode" "sheet" "P" .)}}</div>
+        <div class="wl-sheet-section">账号</div>
+        <div class="wl-sheet-grid">
+            <a class="wl-sheet-item" href="/security">{{icon "shield"}}<span>账号安全</span></a>
+            <a class="wl-sheet-item" href="/password">{{icon "key"}}<span>修改密码</span></a>
+            <a class="wl-sheet-item" href="#" data-logout>{{icon "logout"}}<span>退出登录</span></a>
+        </div>
+        <div class="small text-secondary text-center mt-3">{{.App.Name}} · {{ver .App.Version}}</div>
+    </div>
+</div>{{end}}

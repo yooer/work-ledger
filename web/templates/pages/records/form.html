@@ -1,7 +1,7 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/records.css"}}">{{end}}
 {{define "content"}}{{$o := .Old}}
 {{if not .Categories}}<div class="alert alert-warning">当前没有可用的工作分类，请联系管理员在“分类管理”中新增或启用分类。</div>{{end}}
-<form data-ajax data-url="/records/ajax" data-action="{{if .IsEdit}}update{{else}}create{{end}}" novalidate>
+<form class="wl-record-form-page" data-ajax data-url="/records/ajax" data-action="{{if .IsEdit}}update{{else}}create{{end}}" novalidate>
 <input type="hidden" name="id" value="{{$o.id}}">
 <div class="row row-cards">
 <div class="col-lg-8">
@@ -77,8 +77,8 @@
         <div class="card-body">
             <h3>{{if .IsEdit}}保存修改{{else}}提交记录{{end}}</h3>
             <p class="text-secondary">保存后，记录将进入台账并参与周报统计。</p>
-            <button type="submit" class="btn btn-primary w-100 mb-2">{{icon "check"}}{{if .IsEdit}}保存修改{{else}}保存工作记录{{end}}</button>
-            <a class="btn btn-outline-secondary w-100" href="{{.CancelURL}}">取消</a>
+            <button type="submit" class="btn btn-primary w-100 mb-2 d-none d-lg-block">{{icon "check"}}{{if .IsEdit}}保存修改{{else}}保存工作记录{{end}}</button>
+            <a class="btn btn-outline-secondary w-100 d-none d-lg-block" href="{{.CancelURL}}">取消</a>
             {{if .IsEdit}}<hr>
             <dl class="row small mb-0">
                 <dt class="col-5">记录创建者</dt><dd class="col-7">{{.Record.creator_name}}</dd>
@@ -90,6 +90,10 @@
     </div>
     <div class="alert alert-info mt-3 small"><strong>写好台账的小建议：</strong>写清“为谁、做了什么、结果如何”；合理设置难易度和重复次数，AI 生成的周报会更准确。</div>
 </div>
+</div>
+<div class="wl-savebar d-lg-none d-print-none">
+    <a class="btn btn-outline-secondary" href="{{.CancelURL}}">取消</a>
+    <button type="submit" class="btn btn-primary">{{icon "check"}}{{if .IsEdit}}保存修改{{else}}保存工作记录{{end}}</button>
 </div>
 </form>{{end}}
 {{define "scripts"}}<script src="{{asset "libs/tom-select/tom-select.base.min.js"}}"></script>

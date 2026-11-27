@@ -4,7 +4,8 @@
 {{if eq $m.Key "mine"}}<div class="alert alert-info">这里展示你创建的工作记录，以及别人创建、把你列为参与人员的记录（标记“参与”，由创建者负责修改）。</div>{{end}}
 <div class="card mb-3 wl-filter-card">
     <div class="card-body">
-        <form method="get" action="{{$m.BaseURL}}" class="row g-2 align-items-end">
+        {{template "filter-toggle" (dict "Target" "wl-record-filter" "Count" .FilterCount)}}
+        <div class="collapse d-md-block" id="wl-record-filter"><form method="get" action="{{$m.BaseURL}}" class="row g-2 align-items-end">
             <div class="col-6 col-md-2"><label class="form-label">开始日期</label><input class="form-control" type="text" name="from" value="{{$f.From}}" placeholder="YYYY-MM-DD" data-datepicker></div>
             <div class="col-6 col-md-2"><label class="form-label">结束日期</label><input class="form-control" type="text" name="to" value="{{$f.To}}" placeholder="YYYY-MM-DD" data-datepicker></div>
             <div class="col-6 col-md-2"><label class="form-label">工作分类</label>
@@ -21,7 +22,7 @@
                 {{range .Departments}}<option value="{{.id}}"{{if same .id $f.DepartmentID}} selected{{end}}>{{.label}}</option>{{end}}</select></div>{{end}}
             <div class="col-12 col-md-3"><label class="form-label">关键词</label><input class="form-control" type="search" name="q" value="{{$f.Q}}" placeholder="内容、记录人、分类、参与人"></div>
             <div class="col-12 col-md-auto d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}查询</button><a class="btn btn-link" href="{{$m.BaseURL}}">重置</a></div>
-        </form>
+        </form></div>
     </div>
 </div>
 <div class="card">
@@ -29,18 +30,21 @@
         <h3 class="card-title">共 {{.Result.Total}} 条记录</h3>
         <div class="card-actions btn-list">
             <div class="dropdown">
-                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">{{icon "export"}}导出当前筛选结果</button>
+                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"><span class="d-none d-md-inline">{{icon "export"}}导出当前筛选结果</span><span class="d-md-none">更多操作</span></button>
                 <div class="dropdown-menu dropdown-menu-end">
+                    <h6 class="dropdown-header">导出当前筛选结果</h6>
                     <a class="dropdown-item" href="{{.ExportURLs.csv}}">CSV（Excel 可直接打开）</a>
                     <a class="dropdown-item" href="{{.ExportURLs.xlsx}}">Excel（.xlsx）</a>
                     <a class="dropdown-item" href="{{.ExportURLs.json}}">JSON</a>
+                    {{if eq $m.Key "all"}}<div class="dropdown-divider d-md-none"></div><a class="dropdown-item d-md-none" href="/records/import">{{icon "import"}}导入数据</a>{{end}}
                 </div>
             </div>
-            {{if eq $m.Key "all"}}<a class="btn btn-outline-secondary" href="/records/import">{{icon "import"}}导入数据</a>{{end}}
-            <a class="btn btn-primary" href="/records/create">{{icon "plus"}}填写台账</a>
+            {{if eq $m.Key "all"}}<a class="btn btn-outline-secondary d-none d-md-inline-flex" href="/records/import">{{icon "import"}}导入数据</a>{{end}}
+            <a class="btn btn-primary d-none d-md-inline-flex" href="/records/create">{{icon "plus"}}填写台账</a>
         </div>
     </div>
-    {{if .Result.Items}}<div class="table-responsive">
+    {{if .Result.Items}}<div class="wl-record-cards d-md-none">{{range .Result.Items}}{{template "record-card" (dict "R" . "Mode" $m.Key "Me" $.User.id)}}{{end}}</div>
+    <div class="table-responsive d-none d-md-block">
         <table class="table table-vcenter card-table wl-record-table">
             <thead><tr><th>工作日期</th><th>分类 / 子分类</th><th>工作内容</th><th>参与人员</th><th>难度</th><th>次数</th><th>记录人</th><th class="w-1"></th></tr></thead>
             <tbody>
@@ -52,7 +56,7 @@
                 <td>{{template "difficulty-badge" .difficulty}}</td>
                 <td>{{.work_count}}</td>
                 <td><div>{{.creator_name}}</div><div class="small text-secondary">{{dept .}}</div></td>
-                <td class="text-nowrap"><a class="btn btn-sm btn-ghost-primary" href="/records/{{.id}}" title="查看详情">{{icon "pencil"}}</a>{{if .can_hide}}{{if eq .is_hidden 1}}<button type="button" class="btn btn-sm btn-ghost-secondary" data-ajax-click data-url="/records/ajax" data-action="hide" data-payload='{"id":{{.id}},"hidden":false}' title="已隐藏，点击恢复（重新计入总结）">{{icon "eye-off"}}</button>{{else}}<button type="button" class="btn btn-sm btn-ghost-secondary" data-ajax-click data-url="/records/ajax" data-action="hide" data-payload='{"id":{{.id}},"hidden":true}' data-confirm="隐藏后这条台账仍在列表中显示，但不再计入周报、年度、时段总结和首页统计。确定隐藏吗？" title="正在显示，点击隐藏（不计入总结）">{{icon "eye"}}</button>{{end}}{{end}}</td>
+                <td class="text-nowrap"><a class="btn btn-sm btn-ghost-primary" href="/records/{{.id}}" title="查看详情">{{icon "pencil"}}</a>{{template "hide-toggle" .}}</td>
             </tr>{{end}}
             </tbody>
         </table>

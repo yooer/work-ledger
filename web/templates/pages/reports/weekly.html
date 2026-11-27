@@ -1,11 +1,15 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
 {{define "content"}}<div class="card mb-3 wl-filter-card"><div class="card-body">
+    <div class="d-flex gap-2 mb-2 d-md-none"><a class="btn btn-outline-secondary flex-fill" href="{{.PrevURL}}">‹ 上一周期</a><a class="btn btn-outline-secondary flex-fill" href="{{.NextURL}}">下一周期 ›</a></div>
+    {{template "filter-toggle" (dict "Target" "wl-report-filter" "Count" 0)}}
+    <div class="collapse d-md-block" id="wl-report-filter">
     <form method="get" action="/reports/weekly" class="row g-2 align-items-end">
         <div class="col-md-3"><label class="form-label">周期内任意日期</label><input class="form-control" type="text" name="week_start" value="{{.WeekStart}}" data-datepicker></div>
         {{template "report-scope-select" .}}
         <div class="col-md-auto d-flex gap-2"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button>
-            <a class="btn btn-outline-secondary" href="{{.PrevURL}}">‹ 上一周期</a><a class="btn btn-outline-secondary" href="{{.NextURL}}">下一周期 ›</a></div>
+            <a class="btn btn-outline-secondary d-none d-md-inline-flex" href="{{.PrevURL}}">‹ 上一周期</a><a class="btn btn-outline-secondary d-none d-md-inline-flex" href="{{.NextURL}}">下一周期 ›</a></div>
     </form>
+    </div>
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
     <div class="small text-secondary">当前周期：<strong>{{.WeekStart}} 至 {{.WeekEnd}}</strong> · 统计范围：<strong>{{.Data.Scope.Label}}</strong> · 周期设置：{{.CycleLabel}}{{if .IsAdmin}}（可在“系统与 AI”中修改）{{end}}</div>
     <div class="dropdown">
@@ -25,7 +29,7 @@
         {{template "report-people" .Data.Summary.ByEmployee}}
         {{template "report-preview" .Preview}}
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-4 order-first order-lg-last">
         <form data-ajax data-url="/reports/weekly/ajax" data-action="generate" novalidate>
             <input type="hidden" name="week_start" value="{{.WeekStart}}">
             <input type="hidden" name="target" value="{{.TargetKey}}">

@@ -90,3 +90,79 @@
 
 /* 复制兼容：临时文本框放在可视区外 */
 .wl-copy-buffer { position: fixed; top: -1000px; left: -1000px; width: 1px; height: 1px; opacity: 0; }
+
+/* ===================== 手机与平板（< 992px） ===================== */
+/* 底部固定标签栏 */
+.wl-tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030;
+    display: flex; align-items: stretch;
+    background: var(--tblr-bg-surface); border-top: 1px solid var(--tblr-border-color);
+    box-shadow: 0 -2px 12px rgba(13, 27, 42, .06);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+.wl-tab {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem;
+    padding: .4rem 0 .35rem; min-height: 3.5rem;
+    color: var(--tblr-secondary); font-size: .72rem; line-height: 1.1;
+    background: none; border: 0; text-decoration: none;
+}
+.wl-tab .ti { font-size: 1.4rem; }
+.wl-tab span { white-space: nowrap; }
+.wl-tab:hover, .wl-tab:focus { color: var(--tblr-primary); text-decoration: none; }
+.wl-tab.active { color: var(--tblr-primary); font-weight: 600; }
+.wl-tab-add { color: var(--tblr-primary); }
+.wl-tab-add-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.6rem; height: 2.6rem; margin-top: -1.1rem; border-radius: 50%;
+    background: var(--tblr-primary); color: #fff; box-shadow: 0 4px 10px rgba(15, 118, 110, .35);
+}
+.wl-tab-add-btn .ti { font-size: 1.5rem; }
+
+/* “更多”菜单（底部弹出） */
+.wl-sheet.offcanvas-bottom { height: auto; max-height: 85vh; border-top-left-radius: 1rem; border-top-right-radius: 1rem; }
+.wl-sheet .offcanvas-body { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+.wl-sheet-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .25rem; }
+.wl-sheet-section { grid-column: 1 / -1; margin: .75rem 0 .25rem; font-size: .72rem; letter-spacing: .1em; color: var(--tblr-secondary); }
+.wl-sheet-grid > .wl-sheet-section:first-child { margin-top: 0; }
+.wl-sheet-item {
+    display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .6rem .2rem;
+    border-radius: .6rem; color: var(--tblr-body-color); font-size: .78rem; text-align: center; text-decoration: none;
+}
+.wl-sheet-item .ti { font-size: 1.5rem; color: var(--tblr-primary); }
+.wl-sheet-item.active { background: rgba(15, 118, 110, .08); font-weight: 600; }
+.wl-sheet-item:hover { text-decoration: none; background: var(--tblr-bg-surface-secondary); }
+.min-w-0 { min-width: 0; }
+
+@media (max-width: 991.98px) {
+    /* 给底部标签栏留出空间 */
+    .page-wrapper { padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
+    .page-header { margin-top: .75rem; }
+    .page-header .page-title { font-size: 1.15rem; }
+    .navbar-vertical .navbar-brand.wl-brand { padding-top: .35rem; padding-bottom: .35rem; }
+    #wl-toasts { top: auto !important; bottom: calc(4.5rem + env(safe-area-inset-bottom)); left: 0; right: 0; margin: 0 auto; }
+    /* 卡片标题栏：标题与操作按钮在窄屏上换行排列 */
+    .card-header { flex-wrap: wrap; row-gap: .5rem; }
+    .card-header .card-actions { margin-left: 0; }
+    .card-actions.btn-list, .btn-list { flex-wrap: wrap; }
+}
+
+/* 手机（< 768px）：加大点击区域，输入框 16px 防止 iOS 聚焦时自动放大 */
+@media (max-width: 767.98px) {
+    .page-body .btn:not(.btn-sm):not(.btn-close) { min-height: 2.5rem; }
+    .form-control, .form-select, .ts-control, .ts-control input { font-size: 16px; }
+    .form-control:not(.form-control-sm), .form-select:not(.form-select-sm) { min-height: 2.5rem; }
+    .page-body { margin-top: .75rem; }
+    .container-xl { padding-left: .75rem; padding-right: .75rem; }
+    .card-body { padding: .9rem; }
+    .wl-stat-value { font-size: 1.4rem; }
+    .wl-chart { min-height: 200px; }
+    .wl-markdown table { display: block; overflow-x: auto; }
+    .wl-table-content { max-width: none; }
+}
+
+/* 筛选栏：手机上默认收起（.collapse + d-md-block），电脑上始终展开 */
+.wl-filter-toggle .badge { margin-left: .35rem; }
+
+@media print {
+    .wl-tabbar, .wl-sheet { display: none !important; }
+}

@@ -1,11 +1,14 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
 {{define "content"}}<div class="card mb-3 wl-filter-card"><div class="card-body">
+    {{template "filter-toggle" (dict "Target" "wl-report-filter" "Count" 0)}}
+    <div class="collapse d-md-block" id="wl-report-filter">
     <form method="get" action="/reports/period" class="row g-2 align-items-end" id="period-form">
         <div class="col-6 col-md-2"><label class="form-label">开始日期</label><input class="form-control" type="text" name="start_date" value="{{.Start}}" data-datepicker></div>
         <div class="col-6 col-md-2"><label class="form-label">结束日期</label><input class="form-control" type="text" name="end_date" value="{{.End}}" data-datepicker></div>
         {{template "report-scope-select" .}}
         <div class="col-md-auto"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button></div>
     </form>
+    </div>
     <div class="btn-list mt-3">{{$t := .TargetKey}}{{range .Presets}}<a class="btn btn-sm btn-outline-secondary" href="/reports/period?start_date={{.start}}&end_date={{.end}}{{if $t}}&target={{$t}}{{end}}">{{.label}}</a>{{end}}</div>
     <div class="small text-secondary mt-2">总结时段：<strong>{{.Data.Period.Label}}</strong>（{{.Data.Period.Start}} 至 {{.Data.Period.End}}，共 {{.Data.Period.Days}} 天）· 统计范围：<strong>{{.Data.Scope.Label}}</strong>{{if .Partial}} · <span class="text-warning">时段尚未结束，数据截至今天</span>{{end}}</div>
 </div></div>
@@ -17,7 +20,7 @@
         {{template "report-people" .Data.Summary.ByEmployee}}
         {{template "report-preview" .Preview}}
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-4 order-first order-lg-last">
         <form data-ajax data-url="/reports/period/ajax" data-action="generate" novalidate>
             <input type="hidden" name="start_date" value="{{.Start}}">
             <input type="hidden" name="end_date" value="{{.End}}">

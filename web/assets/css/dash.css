@@ -1,2 +1,6 @@
 /* 工作台 */
 .wl-dash-hero { background: linear-gradient(135deg, #e7f5f2 0%, #ffffff 70%); }
+@media (max-width: 767.98px) {
+    .wl-dash-hero .avatar-lg { display: none; }
+    .wl-dash-hero h2 { font-size: 1.15rem; }
+}

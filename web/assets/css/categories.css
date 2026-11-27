@@ -14,3 +14,9 @@ details[open] > .wl-tree-head::before { transform: rotate(90deg); }
 .wl-tree-form { padding: .75rem; margin-bottom: .5rem; background: var(--tblr-bg-surface-secondary); border-radius: var(--tblr-border-radius); }
 .wl-tree-leaves > li { padding: .2rem 0; }
 .wl-leaf-name { width: 14rem; max-width: 100%; }
+@media (max-width: 767.98px) {
+    .wl-tree-children { margin-left: .4rem; padding-left: .55rem; }
+    .wl-tree-head { padding: .35rem .25rem; }
+    .wl-tree-form { padding: .6rem; }
+    .wl-tree-leaf .wl-leaf-name { flex: 1 1 10rem; width: auto; }
+}

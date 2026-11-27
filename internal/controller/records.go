@@ -112,7 +112,7 @@ func (c *Controllers) recordsPage(ctx *web.Ctx, mode string) error {
 		return err
 	}
 	data := map[string]any{
-		"PageTitle": m.Title, "Active": m.Active, "Mode": m, "Filter": in, "Result": res,
+		"PageTitle": m.Title, "Active": m.Active, "Mode": m, "Filter": in, "Result": res, "FilterCount": recordFilterCount(in),
 		"Categories": cats, "Projects": projects,
 		"Pager": web.NewPager(res.Page, res.Total, res.PerPage, m.BaseURL, filterQuery(in)),
 	}
@@ -208,6 +208,17 @@ func (c *Controllers) recordForm(ctx *web.Ctx) error {
 		"PageTitle": title, "Active": "my-records", "Old": old, "IsEdit": id > 0, "Record": rec,
 		"Categories": cats, "Projects": projects, "People": people, "Selected": selected, "CancelURL": cancel,
 	})
+}
+
+// recordFilterCount 已生效的筛选条件数（手机上筛选栏收起时显示在“筛选”按钮上）。
+func recordFilterCount(f validator.RecordFilterInput) int {
+	n := 0
+	for _, on := range []bool{f.From != "", f.To != "", f.CategoryID > 0, f.ProjectID > 0, f.EmployeeID > 0, f.DepartmentID > 0, f.Q != ""} {
+		if on {
+			n++
+		}
+	}
+	return n
 }
 
 func toRecordInput(p validator.RecordInput) service.RecordInput {

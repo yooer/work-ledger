@@ -8,6 +8,7 @@
 - **前端**：服务端渲染 + Tabler 1.7.1 + Tabler Icons 3.49 + ApexCharts / Tom Select / Litepicker，全部本地化，**不依赖任何 CDN**
 - **交互**：所有写操作统一为 Ajax `POST + JSON + action`
 - **平台**：Linux amd64 / arm64（systemd）、Windows amd64（Windows 服务）
+- **手机与电脑**：同一套页面自适应。电脑上为左侧菜单 + 表格；手机上（屏幕宽度 < 992px）为底部标签栏（工作台 / 我的台账 / ＋填写 / 团队台账或周报中心 / 更多），台账列表显示为卡片，筛选条件默认收起，填写台账的“保存”按钮固定在底部
 
 ---
 

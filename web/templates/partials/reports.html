@@ -43,8 +43,8 @@
 {{define "report-people"}}<div class="card mb-3">
     <div class="card-header"><h3 class="card-title">人员投入</h3></div>
     {{if .}}<div class="table-responsive wl-scroll-300"><table class="table table-vcenter card-table">
-        <thead><tr><th>姓名</th><th>部门</th><th class="text-end">参与记录</th><th class="text-end">工作次数</th></tr></thead>
-        <tbody>{{range .}}<tr><td>{{.Name}}</td><td class="small text-secondary">{{.Department}}</td><td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td></tr>{{end}}</tbody></table></div>
+        <thead><tr><th>姓名</th><th class="d-none d-md-table-cell">部门</th><th class="text-end">参与记录</th><th class="text-end">工作次数</th></tr></thead>
+        <tbody>{{range .}}<tr><td>{{.Name}}</td><td class="small text-secondary d-none d-md-table-cell">{{.Department}}</td><td class="text-end">{{.RecordCount}}</td><td class="text-end">{{.WorkCount}}</td></tr>{{end}}</tbody></table></div>
     {{else}}<div class="card-body text-secondary">暂无数据。</div>{{end}}
 </div>{{end}}
 

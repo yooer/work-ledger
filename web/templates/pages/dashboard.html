@@ -5,18 +5,18 @@
         <span class="avatar avatar-lg bg-primary text-white">{{first (str .User.name)}}</span>
         <div class="flex-fill">
             <h2 class="mb-1">你好，{{.User.name}}</h2>
-            <div class="text-secondary">{{.TodayLabel}} · 统计口径：{{$d.ScopeLabel}} · 本周期 {{$d.WeekStart}} 至 {{$d.WeekEnd}}</div>
+            <div class="text-secondary small">{{.TodayLabel}} · 统计口径：{{$d.ScopeLabel}} · 本周期 {{$d.WeekStart}} 至 {{$d.WeekEnd}}</div>
         </div>
         <div class="btn-list">
-            <a class="btn btn-primary" href="/records/create">{{icon "plus"}}填写台账</a>
+            <a class="btn btn-primary d-none d-lg-inline-flex" href="/records/create">{{icon "plus"}}填写台账</a>
             <a class="btn btn-outline-primary" href="/reports/weekly">{{icon "spark"}}生成周报</a>
         </div>
     </div>
 </div>
 <div class="row row-cards mb-3">
-    {{template "dash-stat" (dict "Title" "今日" "S" $d.Today)}}
-    {{template "dash-stat" (dict "Title" "本周期" "S" $d.Week)}}
-    {{template "dash-stat" (dict "Title" "本月" "S" $d.Month)}}
+    {{template "dash-stat" (dict "Title" "今日" "S" $d.Today "Col" "col-6 col-md-4")}}
+    {{template "dash-stat" (dict "Title" "本周期" "S" $d.Week "Col" "col-6 col-md-4")}}
+    {{template "dash-stat" (dict "Title" "本月" "S" $d.Month "Col" "col-12 col-md-4")}}
 </div>
 <div class="row row-cards">
     <div class="col-lg-8">
@@ -25,7 +25,7 @@
             {{if $d.Recent}}<div class="list-group list-group-flush">{{range $d.Recent}}<a class="list-group-item list-group-item-action" href="/records/{{.id}}">
                 <div class="d-flex justify-content-between small text-secondary"><span>{{dt (str .work_at)}} · {{.category_name}}{{if .project_name}} / {{.project_name}}{{end}}</span><span>{{.creator_name}}</span></div>
                 <div>{{if eq .is_hidden 1}}<span class="badge bg-secondary-lt me-1" title="已隐藏：不计入总结和统计">隐藏</span>{{end}}{{short (str .content) 100}}</div>
-            </a>{{end}}</div>{{else}}<div class="card-body">{{template "empty" "还没有工作记录，点击右上角“填写台账”开始记录。"}}</div>{{end}}
+            </a>{{end}}</div>{{else}}<div class="card-body">{{template "empty" "还没有工作记录，点击“填写台账”开始记录。"}}</div>{{end}}
         </div>
     </div>
     <div class="col-lg-4">
@@ -35,10 +35,10 @@
         </div>
     </div>
 </div>{{end}}
-{{define "dash-stat"}}<div class="col-md-4"><div class="card"><div class="card-body">
+{{define "dash-stat"}}<div class="{{.Col}}"><div class="card h-100"><div class="card-body">
     <div class="subheader">{{.Title}}</div>
     <div class="d-flex align-items-baseline"><div class="wl-stat-value me-2">{{.S.RecordCount}}</div><div class="text-secondary">条记录</div></div>
-    <div class="small text-secondary mt-1">工作 {{.S.TotalWorkCount}} 次 · 参与 {{.S.ParticipantCount}} 人 · 平均难度 {{.S.AvgDifficulty}}</div>
+    <div class="small text-secondary mt-1">工作 {{.S.TotalWorkCount}} 次 · 参与 {{.S.ParticipantCount}} 人<span class="d-none d-sm-inline"> · 平均难度 {{.S.AvgDifficulty}}</span></div>
 </div></div></div>{{end}}
 {{define "scripts"}}<script src="{{asset "libs/apexcharts/apexcharts.min.js"}}"></script>
 <script src="{{asset "js/reports.js"}}"></script>

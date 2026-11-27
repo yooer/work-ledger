@@ -436,3 +436,39 @@ func TestHideRecordAjaxAndListIcons(t *testing.T) {
 		t.Fatal("settings should have leader_can_hide switch")
 	}
 }
+
+// 手机与电脑两套布局：底部标签栏、“更多”菜单、台账卡片、可折叠筛选栏、固定保存栏。
+func TestResponsiveLayout(t *testing.T) {
+	srv, demo := setup(t)
+	admin := login(t, srv, "admin", "Admin12345")
+	_, page := admin.get("/records")
+	for _, want := range []string{
+		`class="wl-tabbar d-lg-none`, `id="wl-more"`, `class="wl-sheet-item`, ">人员管理</span>", // 管理员的“更多”菜单含管理页面
+		`class="wl-record-cards d-md-none"`, `class="table-responsive d-none d-md-block"`,
+		`id="wl-record-filter"`, `wl-filter-toggle`, `class="nav-link"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("records page missing %q", want)
+		}
+	}
+	if strings.Contains(page, "navbar-toggler") {
+		t.Fatal("top menu toggler should be replaced by the bottom tab bar")
+	}
+	_, page = admin.get("/records/create")
+	if !strings.Contains(page, `class="wl-savebar d-lg-none`) {
+		t.Fatal("record form should have the mobile save bar")
+	}
+	_, page = admin.get("/reports/weekly")
+	if !strings.Contains(page, `id="wl-report-filter"`) || !strings.Contains(page, "order-first order-lg-last") {
+		t.Fatal("weekly report should collapse filters and move generate panel on mobile")
+	}
+	// 普通员工：底部第四个按钮是“周报中心”，“更多”菜单里没有管理页面
+	emp := login(t, srv, "wangwu", demo)
+	_, page = emp.get("/")
+	if !strings.Contains(page, `class="wl-tab" href="/reports/weekly"`) && !strings.Contains(page, `class="wl-tab active" href="/reports/weekly"`) {
+		t.Fatal("employee tab bar should link to weekly reports")
+	}
+	if strings.Contains(page, ">人员管理</span>") {
+		t.Fatal("employee menu should not contain admin pages")
+	}
+}

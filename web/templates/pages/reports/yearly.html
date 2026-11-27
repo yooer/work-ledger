@@ -1,10 +1,13 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "css/reports.css"}}">{{end}}
 {{define "content"}}<div class="card mb-3 wl-filter-card"><div class="card-body">
+    {{template "filter-toggle" (dict "Target" "wl-report-filter" "Count" 0)}}
+    <div class="collapse d-md-block" id="wl-report-filter">
     <form method="get" action="/reports/yearly" class="row g-2 align-items-end">
         <div class="col-md-2"><label class="form-label">年度</label><select class="form-select" name="year">{{$y := .Year}}{{range .Years}}<option value="{{.}}"{{if eq . $y}} selected{{end}}>{{.}} 年</option>{{end}}</select></div>
         {{template "report-scope-select" .}}
         <div class="col-md-auto"><button class="btn btn-primary" type="submit">{{icon "search"}}预览</button></div>
     </form>
+    </div>
     <div class="small text-secondary mt-2">按自然年统计：<strong>{{.Data.Period.Start}} 至 {{.Data.Period.End}}</strong> · 统计范围：<strong>{{.Data.Scope.Label}}</strong> · 有记录的月份 {{.Data.Summary.ActiveMonths}} 个</div>
 </div></div>
 {{template "report-stats" .Data}}
@@ -19,7 +22,7 @@
         {{template "report-people" .Data.Summary.ByEmployee}}
         {{template "report-preview" .Preview}}
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-4 order-first order-lg-last">
         <form data-ajax data-url="/reports/yearly/ajax" data-action="generate" novalidate>
             <input type="hidden" name="year" value="{{.Year}}">
             <input type="hidden" name="target" value="{{.TargetKey}}">
